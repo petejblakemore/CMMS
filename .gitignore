@@ -1,0 +1,8 @@
+.DS_Store
+data/
+cmms.db
+asset_import.log
+*.pem
+cmms.log
+*.sqbpro
+__pycache__/
