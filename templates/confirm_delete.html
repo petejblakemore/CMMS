@@ -19,9 +19,11 @@
   {% endif %}
 
   <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+    {% if not blocked %}
     <form method="post">
       <button class="btn" type="submit" style="background: #b91c1c; border-color: #b91c1c;">Yes, delete</button>
     </form>
-    <a class="btn secondary" href="{{ cancel_url }}" style="padding: 0.3rem 0.7rem;">Cancel</a>
+    {% endif %}
+    <a class="btn secondary" href="{{ cancel_url }}" style="padding: 0.3rem 0.7rem;">{{ "Back" if blocked else "Cancel" }}</a>
   </div>
 {% endblock %}

@@ -6,7 +6,6 @@ CREATE TABLE locations (
     created_at      TEXT NOT NULL DEFAULT (datetime('now')),
     active          INTEGER NOT NULL DEFAULT 1
 );
-CREATE TABLE sqlite_sequence(name,seq);
 CREATE TABLE assets (
     id                  INTEGER PRIMARY KEY AUTOINCREMENT,
     name                TEXT NOT NULL,

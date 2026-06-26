@@ -1,7 +1,4 @@
 # routes/work_orders.py
-#
-# Work order management routes: list (grouped by status), create, edit,
-# delete, inline status updates, history, Kanban board, and JSON API.
 
 import sqlite3
 from typing import Optional
@@ -15,13 +12,18 @@ from db import dicts, get_db, templates
 router = APIRouter()
 
 
-# --- List all work orders (grouped by status) --------------------------------
-
 @router.get("/work_orders")
 async def list_work_orders(
     request: Request,
+    sort: str = Query("priority"),
+    direction: str = Query("desc"),
+    wo_status: Optional[str] = Query(None),
+    priority: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    asset: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
+
     open_wos = dicts(db.execute(
         "SELECT * FROM v_open_work_orders WHERE status = 'Open' ORDER BY "
         "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
@@ -53,14 +55,10 @@ async def list_work_orders(
             "ORDER BY completed_at DESC LIMIT 50"
         )
     )
-    cancelled_wos = dicts(
-        db.execute(
-            "SELECT * FROM work_orders "
-            "WHERE status = 'Cancelled' "
-            "ORDER BY created_at DESC LIMIT 50"
-        )
-    )
 
+    wo_locations_list = sorted({r["location_name"] for r in db.execute("SELECT DISTINCT location_name FROM v_open_work_orders WHERE location_name IS NOT NULL")})
+    wo_assets_list = sorted({r["asset_name"] for r in db.execute("SELECT DISTINCT asset_name FROM v_open_work_orders WHERE asset_name IS NOT NULL")})
+    
     return templates.TemplateResponse(
         "work_orders.html",
         {
@@ -70,12 +68,82 @@ async def list_work_orders(
             "queued_wos": queued_wos,
             "icebox_wos": icebox_wos,
             "closed_wos": closed_wos,
-            "cancelled_wos": cancelled_wos
         },
     )
 
+@router.get("/work_orders/queued")
+async def list_queued_work_orders(
+    request: Request,
+    sort: str = Query("priority"),
+    direction: str = Query("desc"),
+    priority: Optional[str] = Query(None),
+    location: Optional[str] = Query(None),
+    asset: Optional[str] = Query(None),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    sortable_columns = {
+        "id": "work_order_id", "title": "title", "status": "status",
+        "priority": "priority", "due_date": "due_date",
+        "location": "location_name", "asset": "asset_name",
+    }
 
-# --- Work order history (searchable/filterable) ------------------------------
+    sort_col = sortable_columns.get(sort, "priority")
+    dir_sql = "DESC" if direction.lower() == "desc" else "ASC"
+
+    where_clauses = []
+    params = []
+
+    if priority:
+        where_clauses.append("priority = ?")
+        params.append(priority)
+    if location:
+        where_clauses.append("location_name = ?")
+        params.append(location)
+    if asset:
+        where_clauses.append("asset_name = ?")
+        params.append(asset)
+
+    extra_where = (" AND " + " AND ".join(where_clauses)) if where_clauses else ""
+
+    queued_wos = dicts(
+        db.execute(
+            f"""
+            SELECT * FROM v_queued_work_orders
+            WHERE 1=1 {extra_where}
+            ORDER BY
+              CASE
+                WHEN ? = 'priority' THEN
+                  CASE priority
+                    WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2
+                    WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0
+                    ELSE -1
+                  END
+                ELSE 0
+              END {dir_sql},
+              CASE WHEN due_date IS NULL THEN 1 ELSE 0 END,
+              {sort_col} {dir_sql}
+            """,
+            params + ["priority" if sort_col == "priority" else ""],
+        )
+    )
+
+    q_priorities_list = ["Low", "Normal", "High", "Urgent"]
+    q_locations_list = sorted({r["location_name"] for r in db.execute("SELECT DISTINCT location_name FROM v_queued_work_orders WHERE location_name IS NOT NULL AND location_name != ''")})
+    q_assets_list = sorted({r["asset_name"] for r in db.execute("SELECT DISTINCT asset_name FROM v_queued_work_orders WHERE asset_name IS NOT NULL AND asset_name != ''")})
+
+    return templates.TemplateResponse(
+        "work_orders_queued.html",
+        {
+            "request": request, "queued_wos": queued_wos,
+            "sort": sort, "direction": direction,
+            "q_priorities_list": q_priorities_list,
+            "q_locations_list": q_locations_list, "q_assets_list": q_assets_list,
+            "f_priority": priority or "", "f_location": location or "", "f_asset": asset or "",
+        },
+    )
+# Add these routes to routes/work_orders.py
+
+# --- Work Order History ------------------------------------------------------
 
 @router.get("/work_orders/history")
 async def work_order_history(
@@ -115,7 +183,7 @@ async def work_order_history(
     query += " ORDER BY h.event_time DESC LIMIT 200"
     history = dicts(db.execute(query, params))
 
-    statuses = ["Open", "In Progress", "Queued", "Done", "Cancelled", "Icebox"]
+    statuses = ["Open", "In Progress", "Queued", "Done", "Cancelled"]
 
     return templates.TemplateResponse(
         "work_order_history.html",
@@ -130,96 +198,6 @@ async def work_order_history(
             "f_date_to": date_to or "",
         },
     )
-
-
-# --- Kanban board view -------------------------------------------------------
-
-@router.get("/work_orders/board")
-async def work_order_board(
-    request: Request,
-    db: sqlite3.Connection = Depends(get_db),
-):
-    all_wos = dicts(
-        db.execute(
-            """
-            SELECT w.id, w.title, w.status, w.priority, w.due_date,
-                   a.name AS asset_name, l.name AS location_name
-            FROM work_orders w
-            LEFT JOIN assets a ON a.id = w.asset_id
-            LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id)
-            WHERE w.status NOT IN ('Done', 'Cancelled')
-            ORDER BY CASE w.priority
-                WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2
-                WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0
-                ELSE -1
-            END DESC, w.due_date IS NULL, w.due_date
-            """
-        )
-    )
-
-    board = {
-        "Icebox": [],
-        "Queued": [],
-        "Open": [],
-        "In Progress": [],
-        "Done": [],
-    }
-    for wo in all_wos:
-        if wo["status"] in board:
-            board[wo["status"]].append(wo)
-
-    return templates.TemplateResponse(
-        "work_order_board.html",
-        {"request": request, "board": board},
-    )
-
-
-# --- JSON API for board drag-and-drop status updates -------------------------
-
-@router.post("/api/work_orders/{wo_id}/status")
-async def api_update_work_order_status(
-    request: Request,
-    wo_id: int,
-    db: sqlite3.Connection = Depends(get_db),
-):
-    from fastapi.responses import JSONResponse
-
-    body = await request.json()
-    new_status = body.get("status")
-
-    if new_status not in VALID_STATUSES:
-        return JSONResponse({"error": f"Invalid status: {new_status}"}, status_code=400)
-
-    cur = db.execute("SELECT status FROM work_orders WHERE id = ?", (wo_id,))
-    row = cur.fetchone()
-    if not row:
-        return JSONResponse({"error": "Work order not found"}, status_code=404)
-
-    old_status = row["status"]
-
-    db.execute(
-        """
-        UPDATE work_orders
-        SET status = ?,
-            completed_at = CASE
-              WHEN ? = 'Done' AND completed_at IS NULL THEN datetime('now')
-              ELSE completed_at
-            END
-        WHERE id = ?
-        """,
-        (new_status, new_status, wo_id),
-    )
-
-    db.execute(
-        "INSERT INTO work_order_history (work_order_id, old_status, new_status, note) VALUES (?, ?, ?, ?)",
-        (wo_id, old_status, new_status, "Changed via Kanban board"),
-    )
-    db.commit()
-
-    return JSONResponse({"ok": True, "old_status": old_status, "new_status": new_status})
-
-
-# --- Create new work order ---------------------------------------------------
 
 @router.get("/work_orders/new")
 async def new_work_order_form(request: Request, db: sqlite3.Connection = Depends(get_db)):
@@ -270,8 +248,6 @@ async def create_work_order(
     return RedirectResponse(url="/work_orders", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- Inline status + due date update from list view --------------------------
-
 @router.post("/work_orders/{wo_id}/status")
 async def update_work_order_status(
     request: Request,
@@ -312,8 +288,6 @@ async def update_work_order_status(
     return RedirectResponse(url="/work_orders", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- Edit work order (full form) ---------------------------------------------
-
 @router.get("/work_orders/{wo_id}/edit")
 async def edit_work_order_form(
     request: Request, wo_id: int, db: sqlite3.Connection = Depends(get_db),
@@ -331,7 +305,7 @@ async def edit_work_order_form(
         )
     )
     locations = dicts(db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name"))
-
+    
     wo_history = dicts(
         db.execute(
             "SELECT * FROM work_order_history WHERE work_order_id = ? ORDER BY event_time DESC",
@@ -339,9 +313,10 @@ async def edit_work_order_form(
         )
     )
 
+
     return templates.TemplateResponse(
         "work_order_edit.html",
-        {"request": request, "wo": wo, "assets": assets, "locations": locations, "wo_history": wo_history},
+         {"request": request, "wo": wo, "assets": assets, "locations": locations, "wo_history": wo_history},
     )
 
 
@@ -402,8 +377,7 @@ async def update_work_order_core(
     db.commit()
     return RedirectResponse(url="/work_orders", status_code=status.HTTP_303_SEE_OTHER)
 
-
-# --- Delete work order (confirmation page) -----------------------------------
+    # --- Work Orders: delete -----------------------------------------------------
 
 @router.get("/work_orders/{wo_id}/delete")
 async def delete_work_order_confirm(
@@ -418,7 +392,6 @@ async def delete_work_order_confirm(
 
     wo = dict(row)
 
-    # Block deletion of completed work orders
     if wo["status"] == "Done":
         return templates.TemplateResponse(
             "confirm_delete.html",
@@ -429,11 +402,10 @@ async def delete_work_order_confirm(
                 "warning": None,
                 "details": [f"Status: {wo['status']}", f"Completed: {wo.get('completed_at', 'N/A')}"],
                 "cancel_url": "/work_orders",
-                "blocked": True,
             },
         )
 
-    # Show confirmation with linked record counts
+    # Count history entries
     history_count = db.execute(
         "SELECT COUNT(*) as count FROM work_order_history WHERE work_order_id = ?", (wo_id,)
     ).fetchone()["count"]
@@ -455,8 +427,6 @@ async def delete_work_order_confirm(
     )
 
 
-# --- Delete work order (execute) ---------------------------------------------
-
 @router.post("/work_orders/{wo_id}/delete")
 async def delete_work_order(
     request: Request,
@@ -469,18 +439,7 @@ async def delete_work_order(
         raise HTTPException(status_code=404, detail="Work order not found")
 
     if row["status"] == "Done":
-        return templates.TemplateResponse(
-            "confirm_delete.html",
-            {
-                "request": request,
-                "heading": "Cannot delete this work order",
-                "message": "Completed work orders cannot be deleted — they are part of the maintenance history.",
-                "warning": None,
-                "details": None,
-                "cancel_url": "/work_orders",
-                "blocked": True,
-            },
-        )
+        raise HTTPException(status_code=400, detail="Completed work orders cannot be deleted")
 
     # History is deleted by ON DELETE CASCADE
     db.execute("DELETE FROM work_orders WHERE id = ?", (wo_id,))

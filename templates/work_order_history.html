@@ -42,8 +42,14 @@
   <tbody>
     {% for h in history %}
     <tr>
-      <td><a href="/work_orders/{{ h.work_order_id }}/edit">{{ h.work_order_id }}</a></td>
-      <td>{{ h.wo_title or "" }}</td>
+      <td>
+        {% if h.wo_title %}
+          <a href="/work_orders/{{ h.work_order_id }}/edit">{{ h.work_order_id }}</a>
+        {% else %}
+          {{ h.work_order_id }} <span style="color: #94a3b8; font-size: 0.8rem;">(deleted)</span>
+        {% endif %}
+      </td>
+      <td>{{ h.wo_title or "(deleted)" }}</td>
       <td>{{ h.old_status or "" }}</td>
       <td>{{ h.new_status or "" }}</td>
       <td>{{ h.event_time or "" }}</td>

@@ -109,5 +109,33 @@
 {% else %}
   <p>No recently completed work orders.</p>
 {% endif %}
+<details style="margin-top: 1rem;">
+  <summary style="cursor: pointer; font-weight: 600; font-size: 1rem;">Cancelled ({{ cancelled_wos|length }})</summary>
+  {% if cancelled_wos %}
+  <table>
+    <thead>
+      <tr>
+        <th>ID</th>
+        <th>Title</th>
+        <th>Cancelled</th>
+        <th>Notes</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for wo in cancelled_wos %}
+      <tr>
+        <td><a href="/work_orders/{{ wo.id }}/edit">{{ wo.id }}</a></td>
+        <td>{{ wo.title }}</td>
+        <td>{{ wo.completed_at or "" }}</td>
+        <td>{{ wo.closed_notes or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p>No cancelled work orders.</p>
+  {% endif %}
+</details>
+
 
 {% endblock %}
