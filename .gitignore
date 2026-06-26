@@ -6,3 +6,4 @@ asset_import.log
 cmms.log
 *.sqbpro
 __pycache__/
+startup.sh
