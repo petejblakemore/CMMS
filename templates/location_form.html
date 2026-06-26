@@ -1,0 +1,29 @@
+<!-- templates/location_form.html -->
+{% extends "base.html" %} {% block title %}New location – Home CMMS{% endblock
+%} {% block content %}
+<h2>New location</h2>
+
+<form method="post">
+    <input
+        type="hidden"
+        name="csrftoken"
+        value="{{ request.state.csrftoken }}"
+    />
+    <label for="name">Name</label>
+    <input id="name" name="name" type="text" required />
+
+    <label for="parent_id">Parent location (optional)</label>
+    <select id="parent_id" name="parent_id">
+        <option value="0">(none)</option>
+        {% for p in parents %}
+        <option value="{{ p.id }}">{{ p.name }}</option>
+        {% endfor %}
+    </select>
+
+    <label for="description">Description</label>
+    <textarea id="description" name="description"></textarea>
+
+    <button class="btn" type="submit">Save</button>
+    <a class="btn secondary" href="/locations">Cancel</a>
+</form>
+{% endblock %}

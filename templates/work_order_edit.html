@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}Edit work order #{{ wo.id }} – Home CMMS{% endblock %}
+{% block content %}
+<h2>Edit work order #{{ wo.id }}</h2>
+
+<form method="post">
+  <input type="hidden" name="csrftoken" value="{{ request.state.csrftoken }}">
+
+  <div class="form-row">
+    <label for="title">Title</label>
+    <input id="title" name="title" type="text" value="{{ wo.title }}" required>
+  </div>
+
+  <div class="form-row">
+    <label for="description">Description</label>
+    <textarea id="description" name="description">{{ wo.description or "" }}</textarea>
+  </div>
+
+  <div class="form-row">
+    <label for="asset_id">Asset</label>
+    <select id="asset_id" name="asset_id">
+      <option value="0">(none)</option>
+      {% for a in assets %}
+        <option value="{{ a.id }}" {% if wo.asset_id and wo.asset_id == a.id %}selected{% endif %}>{{ a.location_name }} – {{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="location_id">Location</label>
+    <select id="location_id" name="location_id">
+      <option value="0">(none)</option>
+      {% for l in locations %}
+        <option value="{{ l.id }}" {% if wo.location_id and wo.location_id == l.id %}selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="status">Status</label>
+    {% set s = wo.status %}
+    <select id="status" name="status_value">
+      <option value="Open" {% if s == "Open" %}selected{% endif %}>Open</option>
+      <option value="Queued" {% if s == "Queued" %}selected{% endif %}>Queued</option>
+      <option value="In Progress" {% if s == "In Progress" %}selected{% endif %}>In Progress</option>
+      <option value="Done" {% if s == "Done" %}selected{% endif %}>Done</option>
+      <option value="Cancelled" {% if s == "Cancelled" %}selected{% endif %}>Cancelled</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="priority">Priority</label>
+    {% set p = wo.priority %}
+    <select id="priority" name="priority">
+      <option value="Low" {% if p == "Low" %}selected{% endif %}>Low</option>
+      <option value="Normal" {% if p == "Normal" %}selected{% endif %}>Normal</option>
+      <option value="High" {% if p == "High" %}selected{% endif %}>High</option>
+      <option value="Urgent" {% if p == "Urgent" %}selected{% endif %}>Urgent</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="due_date">Due date</label>
+    <input id="due_date" name="due_date" type="date" value="{{ wo.due_date or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="source">Source</label>
+    <input id="source" name="source" type="text" value="{{ wo.source or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="closed_notes">Closed notes</label>
+    <textarea id="closed_notes" name="closed_notes">{{ wo.closed_notes or "" }}</textarea>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Save changes</button>
+    <a class="btn secondary" href="/work_orders">Cancel</a>
+    <a class="btn" href="/work_orders/{{ wo.id }}/delete" style="background: #b91c1c; border-color: #b91c1c; margin-left: auto;">Delete</a>
+  </div>
+  
+{% if wo_history %}
+<h3 style="margin-top: 2rem;">Status History</h3>
+<table>
+  <thead>
+    <tr>
+      <th>When</th>
+      <th>From</th>
+      <th>To</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in wo_history %}
+    <tr>
+      <td>{{ h.event_time or "" }}</td>
+      <td>{{ h.old_status or "" }}</td>
+      <td>{{ h.new_status or "" }}</td>
+      <td>{{ h.note or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
+</form>
+{% endblock %}

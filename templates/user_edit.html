@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block title %}Edit User – Home CMMS{% endblock %}
+{% block content %}
+<h2>Edit User: {{ user.username }}</h2>
+
+{% if error %}
+  <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+<form method="post">
+
+  <div class="form-row">
+    <label for="username">Username</label>
+    <input type="text" id="username" value="{{ user.username }}" disabled>
+  </div>
+
+  <div class="form-row">
+    <label for="display_name">Display name *</label>
+    <input type="text" id="display_name" name="display_name" value="{{ user.display_name or '' }}" required>
+  </div>
+
+  <div class="form-row">
+    <label for="new_password">New password</label>
+    <input type="password" id="new_password" name="new_password" placeholder="Leave blank to keep current">
+  </div>
+
+  <div class="form-row">
+    <label for="new_password_confirm">Confirm new password</label>
+    <input type="password" id="new_password_confirm" name="new_password_confirm">
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Save changes</button>
+    <a class="btn secondary" href="/users">Cancel</a>
+    <a class="btn" href="/users/{{ user.id }}/delete" style="background: #b91c1c; border-color: #b91c1c; margin-left: auto;">Delete</a>
+  </div>
+
+</form>
+{% endblock %}

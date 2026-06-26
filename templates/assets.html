@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% block title %}Assets – Home CMMS{% endblock %}
+{% block content %}
+<h2>Assets</h2>
+
+<p>
+  <a href="/assets/new">Add a new asset</a> |
+  <a href="/assets/import">Import from CSV</a>
+</p>
+
+<form method="get" class="form-row" style="flex-wrap: wrap; margin-bottom: 0.5rem;">
+  <select name="location">
+    <option value="">All locations</option>
+    {% for loc in locations_list %}
+      <option value="{{ loc }}" {% if f_location == loc %}selected{% endif %}>{{ loc }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="category">
+    <option value="">All categories</option>
+    {% for cat in categories_list %}
+      <option value="{{ cat }}" {% if f_category == cat %}selected{% endif %}>{{ cat }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="asset_status">
+    <option value="">All statuses</option>
+    {% for s in statuses_list %}
+      <option value="{{ s }}" {% if f_status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="manufacturer">
+    <option value="">All manufacturers</option>
+    {% for m in manufacturers_list %}
+      <option value="{{ m }}" {% if f_manufacturer == m %}selected{% endif %}>{{ m }}</option>
+    {% endfor %}
+  </select>
+
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn secondary" href="/assets">Clear</a>
+</form>
+
+<table>
+  <thead>
+    <tr>
+      <th><a href="?sort=asset_name&direction={{ 'asc' if sort != 'asset_name' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Asset</a></th>
+      <th><a href="?sort=location&direction={{ 'asc' if sort != 'location' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Location</a></th>
+      <th><a href="?sort=category&direction={{ 'asc' if sort != 'category' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Category</a></th>
+      <th><a href="?sort=type&direction={{ 'asc' if sort != 'type' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Type</a></th>
+      <th><a href="?sort=status&direction={{ 'asc' if sort != 'status' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Status</a></th>
+      <th><a href="?sort=manufacturer&direction={{ 'asc' if sort != 'manufacturer' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Manufacturer</a></th>
+      <th>Model</th>
+      <th>Serial #</th>
+      <th><a href="?sort=purchased&direction={{ 'asc' if sort != 'purchased' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Purchased</a></th>
+      <th><a href="?sort=warranty&direction={{ 'asc' if sort != 'warranty' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Warranty ends</a></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for a in assets %}
+      <tr>
+        <td><a href="/assets/{{ a.asset_id }}/edit">{{ a.asset_name }}</a></td>
+        <td>{{ a.location_name }}</td>
+        <td>{{ a.category or "" }}</td>
+        <td>{{ a.type or "" }}</td>
+        <td>{{ a.status or "" }}</td>
+        <td>{{ a.manufacturer or "" }}</td>
+        <td>{{ a.model or "" }}</td>
+        <td>{{ a.serial_number or "" }}</td>
+        <td>{{ a.purchase_date or "" }}</td>
+        <td>{{ a.warranty_end_date or "" }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{% if not assets %}
+  <p>No assets match the current filters.</p>
+{% endif %}
+{% endblock %}

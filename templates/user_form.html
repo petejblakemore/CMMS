@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}New User – Home CMMS{% endblock %}
+{% block content %}
+<h2>New User</h2>
+
+{% if error %}
+  <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+<form method="post">
+
+  <div class="form-row">
+    <label for="display_name">Display name *</label>
+    <input type="text" id="display_name" name="display_name" placeholder="e.g. Pete" required>
+  </div>
+
+  <div class="form-row">
+    <label for="username">Username *</label>
+    <input type="text" id="username" name="username" placeholder="e.g. pete" required>
+  </div>
+
+  <div class="form-row">
+    <label for="password">Password *</label>
+    <input type="password" id="password" name="password" required>
+  </div>
+
+  <div class="form-row">
+    <label for="password_confirm">Confirm password *</label>
+    <input type="password" id="password_confirm" name="password_confirm" required>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Create user</button>
+    <a class="btn secondary" href="/users">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}

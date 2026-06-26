@@ -1,0 +1,41 @@
+<!-- templates/asset_import.html -->
+{% extends "base.html" %}
+
+{% block title %}Import assets – Home CMMS{% endblock %}
+
+{% block content %}
+<h2>Import assets from CSV</h2>
+
+<p>
+  Upload a CSV file with a header row. Required columns:
+  <code>name</code>, <code>location_name</code>.<br>
+  Optional columns:
+  <code>category</code>, <code>type</code>, <code>manufacturer</code>,
+  <code>model</code>, <code>serial_number</code>,
+  <code>purchase_date</code>, <code>warranty_end_date</code>,
+  <code>status</code>, <code>notes</code>.
+</p>
+
+{% if error %}
+  <p style="color: darkred; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+{% if imported is defined %}
+  <div class="card">
+    <p><strong>Import complete.</strong></p>
+    <p>Imported: {{ imported }} asset(s)</p>
+    <p>Skipped (duplicates or invalid rows): {{ skipped }}</p>
+    <p>Log file: {{ log_path }}</p>
+  </div>
+{% endif %}
+
+<form method="post" enctype="multipart/form-data">
+  <label for="file">CSV file</label>
+  <input id="file" name="file" type="file" accept=".csv" required>
+
+  <div class="mt-md">
+    <button class="btn" type="submit">Upload &amp; import</button>
+    <a class="btn secondary" href="/assets">Back to assets</a>
+  </div>
+</form>
+{% endblock %}

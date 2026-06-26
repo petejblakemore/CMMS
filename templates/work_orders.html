@@ -1,0 +1,113 @@
+{% extends "base.html" %}
+{% block title %}Work orders – Home CMMS{% endblock %}
+{% block content %}
+<h2>Work orders</h2>
+
+<p><a class="btn" href="/work_orders/new">New work order</a></p>
+
+{% macro wo_table(wos) %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Title</th>
+      <th>Priority</th>
+      <th>Due</th>
+      <th>Location</th>
+      <th>Asset</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for wo in wos %}
+    <tr>
+      <td><a href="/work_orders/{{ wo.work_order_id }}/edit">{{ wo.work_order_id }}</a></td>
+      <td>{{ wo.title }}</td>
+      <td>
+        {% if wo.priority == "High" %}
+          <span class="badge high">High</span>
+        {% elif wo.priority == "Urgent" %}
+          <span class="badge urgent">Urgent</span>
+        {% else %}
+          {{ wo.priority }}
+        {% endif %}
+      </td>
+      <td>{{ wo.due_date or "" }}</td>
+      <td>{{ wo.location_name or "" }}</td>
+      <td>{{ wo.asset_name or "" }}</td>
+      <td>
+        <form method="post" action="/work_orders/{{ wo.work_order_id }}/status" style="display: flex; gap: 0.3rem; align-items: center;">
+          <select name="new_status" style="font-size: 0.8rem;">
+            <option value="Open" {% if wo.status == "Open" %}selected{% endif %}>Open</option>
+            <option value="Queued" {% if wo.status == "Queued" %}selected{% endif %}>Queued</option>
+            <option value="In Progress" {% if wo.status == "In Progress" %}selected{% endif %}>In Progress</option>
+            <option value="Icebox" {% if wo.status == "Icebox" %}selected{% endif %}>Icebox</option>
+            <option value="Done">Done</option>
+            <option value="Cancelled">Cancelled</option>
+          </select>
+          <input type="date" name="due_date" value="{{ wo.due_date or '' }}" style="width: 9rem; font-size: 0.8rem;">
+          <input type="text" name="note" placeholder="Note" style="width: 6rem; font-size: 0.8rem;">
+          <button class="btn" type="submit" style="font-size: 0.8rem; padding: 0.2rem 0.5rem;">Update</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endmacro %}
+
+<h3>Open ({{ open_wos|length }})</h3>
+{% if open_wos %}
+  {{ wo_table(open_wos) }}
+{% else %}
+  <p>No open work orders.</p>
+{% endif %}
+
+<h3>In Progress ({{ in_progress_wos|length }})</h3>
+{% if in_progress_wos %}
+  {{ wo_table(in_progress_wos) }}
+{% else %}
+  <p>No work orders in progress.</p>
+{% endif %}
+
+<h3>Queued ({{ queued_wos|length }})</h3>
+{% if queued_wos %}
+  {{ wo_table(queued_wos) }}
+{% else %}
+  <p>No queued work orders.</p>
+{% endif %}
+
+<h3>Icebox ({{ icebox_wos|length }})</h3>
+{% if icebox_wos %}
+  {{ wo_table(icebox_wos) }}
+{% else %}
+  <p>No icebox work orders.</p>
+{% endif %}
+
+<h3>Recently Completed</h3>
+{% if closed_wos %}
+<table>
+  <thead>
+    <tr>
+      <th>ID</th>
+      <th>Title</th>
+      <th>Completed</th>
+      <th>Notes</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for wo in closed_wos %}
+    <tr>
+      <td>{{ wo.id }}</td>
+      <td>{{ wo.title }}</td>
+      <td>{{ wo.completed_at or "" }}</td>
+      <td>{{ wo.closed_notes or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+  <p>No recently completed work orders.</p>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}Edit Asset #{{ asset.id }} – Home CMMS{% endblock %}
+{% block content %}
+<h2>Edit Asset #{{ asset.id }}</h2>
+
+<form method="post">
+
+  <div class="form-row">
+    <label for="name">Name *</label>
+    <input type="text" id="name" name="name" value="{{ asset.name }}" required>
+  </div>
+
+  <div class="form-row">
+    <label for="location_id">Location *</label>
+    <select id="location_id" name="location_id" required>
+      {% for loc in locations %}
+        <option value="{{ loc.id }}" {% if asset.location_id == loc.id %}selected{% endif %}>{{ loc.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="category">Category</label>
+    <input list="category_list" id="category" name="category" value="{{ asset.category or '' }}">
+    <datalist id="category_list">
+      {% for cat in categories %}
+        {% if cat %}<option value="{{ cat }}"></option>{% endif %}
+      {% endfor %}
+    </datalist>
+  </div>
+
+  <div class="form-row">
+    <label for="type">Type</label>
+    <input list="type_list" id="type" name="asset_type" value="{{ asset.type or '' }}">
+    <datalist id="type_list">
+      {% for t in types %}
+        {% if t %}<option value="{{ t }}"></option>{% endif %}
+      {% endfor %}
+    </datalist>
+  </div>
+
+  <div class="form-row">
+    <label for="status">Status</label>
+    {% set s = asset.status %}
+    <select id="status" name="asset_status">
+      <option value="Running" {% if s == "Running" %}selected{% endif %}>Running</option>
+      <option value="Needs Maintenance" {% if s == "Needs Maintenance" %}selected{% endif %}>Needs Maintenance</option>
+      <option value="Out of Service" {% if s == "Out of Service" %}selected{% endif %}>Out of Service</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="manufacturer">Manufacturer</label>
+    <input type="text" id="manufacturer" name="manufacturer" value="{{ asset.manufacturer or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="model">Model</label>
+    <input type="text" id="model" name="model" value="{{ asset.model or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="serial_number">Serial number</label>
+    <input type="text" id="serial_number" name="serial_number" value="{{ asset.serial_number or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="purchase_date">Purchase date</label>
+    <input type="date" id="purchase_date" name="purchase_date" value="{{ asset.purchase_date or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="warranty_end_date">Warranty end</label>
+    <input type="date" id="warranty_end_date" name="warranty_end_date" value="{{ asset.warranty_end_date or '' }}">
+  </div>
+    <div class="form-row">
+    <label for="cost">Cost</label>
+    <input type="number" id="cost" name="cost" step="0.01" value="{{ asset.cost or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="vendor">Vendor</label>
+    <input type="text" id="vendor" name="vendor" value="{{ asset.vendor or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="notes">Notes</label>
+    <textarea id="notes" name="notes" rows="3">{{ asset.notes or '' }}</textarea>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Save changes</button>
+    <a class="btn secondary" href="/assets">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}

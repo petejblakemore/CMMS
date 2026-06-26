@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}Edit Maintenance Plan #{{ plan.id }} – Home CMMS{% endblock %}
+{% block content %}
+<h2>Edit Maintenance Plan #{{ plan.id }}</h2>
+
+{% if error %}
+  <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+<form method="post">
+
+  <div class="form-row">
+    <label for="title">Title *</label>
+    <input type="text" id="title" name="title" value="{{ plan.title }}" required>
+  </div>
+
+  <div class="form-row">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3">{{ plan.description or '' }}</textarea>
+  </div>
+
+  <div class="form-row">
+    <label for="asset_id">Asset</label>
+    <select id="asset_id" name="asset_id">
+      <option value="0">(none)</option>
+      {% for a in assets %}
+        <option value="{{ a.id }}" {% if plan.asset_id == a.id %}selected{% endif %}>{{ a.location_name }} – {{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="location_id">Location</label>
+    <select id="location_id" name="location_id">
+      <option value="0">(none — use asset's location)</option>
+      {% for l in locations %}
+        <option value="{{ l.id }}" {% if plan.location_id == l.id %}selected{% endif %}>{{ l.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="frequency_value">Every *</label>
+    <input type="number" id="frequency_value" name="frequency_value" min="1" value="{{ plan.frequency_value }}" required style="max-width: 5rem;">
+    <select id="frequency_unit" name="frequency_unit">
+      <option value="day" {% if plan.frequency_unit == 'day' %}selected{% endif %}>day(s)</option>
+      <option value="month" {% if plan.frequency_unit == 'month' %}selected{% endif %}>month(s)</option>
+      <option value="year" {% if plan.frequency_unit == 'year' %}selected{% endif %}>year(s)</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="next_due_date">Next due date</label>
+    <input type="date" id="next_due_date" name="next_due_date" value="{{ plan.next_due_date or '' }}">
+  </div>
+
+  <div class="form-row">
+    <label for="active">Active</label>
+    <select id="active" name="active">
+      <option value="1" {% if plan.active %}selected{% endif %}>Yes</option>
+      <option value="0" {% if not plan.active %}selected{% endif %}>No</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label>Last done</label>
+    <span style="padding: 0.3rem 0; font-size: 0.9rem;">{{ plan.last_done_date or 'Never' }}</span>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Save changes</button>
+    <a class="btn secondary" href="/maintenance">Cancel</a>
+    <a class="btn" href="/maintenance/{{ plan.id }}/delete" style="background: #b91c1c; border-color: #b91c1c; margin-left: auto;">Deactivate</a>
+  </div>
+
+</form>
+
+<h3 style="margin-top: 2rem;">Job Plan Steps</h3>
+
+{% if steps %}
+<table>
+  <thead>
+    <tr>
+      <th>#</th>
+      <th>Step</th>
+      <th>Notes / Tools</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for s in steps %}
+    <tr>
+      <td>{{ s.step_number }}</td>
+      <td>{{ s.description }}</td>
+      <td>{{ s.notes or "" }}</td>
+      <td>
+        <form method="post" action="/maintenance/{{ plan.id }}/steps/{{ s.id }}/delete" style="display: inline;">
+          <button class="btn secondary" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem; color: #b91c1c; border-color: #b91c1c;">Remove</button>
+        </form>
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No steps defined. Add steps below for complex maintenance tasks.</p>
+{% endif %}
+
+<form method="post" action="/maintenance/{{ plan.id }}/steps/add" class="card" style="margin-top: 0.5rem;">
+  <div class="form-row">
+    <label for="step_desc">New step</label>
+    <input type="text" id="step_desc" name="description" placeholder="e.g. Check pressure gauge" required>
+  </div>
+  <div class="form-row">
+    <label for="step_notes">Notes / Tools</label>
+    <input type="text" id="step_notes" name="notes" placeholder="e.g. Use calibrated gauge, record reading">
+  </div>
+  <div class="form-actions">
+    <button class="btn" type="submit">Add step</button>
+  </div>
+</form>
+
+{% endblock %}

@@ -1,0 +1,29 @@
+<!-- templates/locations.html -->
+{% extends "base.html" %}
+
+{% block title %}Locations – Home CMMS{% endblock %}
+
+{% block content %}
+<h2>Locations</h2>
+
+<p>Locations are shown in a hierarchy from estate down to rooms and sub‑areas.</p>
+
+{% macro render_locations(nodes) %}
+<ul>
+  {% for loc in nodes %}
+    <li>
+        <a href="/locations/{{ loc.id }}/edit">{{ loc.name }}</a>
+      {% if loc.children %}
+        {{ render_locations(loc.children) }}
+      {% endif %}
+    </li>
+  {% endfor %}
+</ul>
+{% endmacro %}
+
+{{ render_locations(locations) }}
+
+<p>
+  <a href="/locations/new">Add a new location</a>
+</p>
+{% endblock %}

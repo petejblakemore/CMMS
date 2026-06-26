@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% block title %}Work Order Board – Home CMMS{% endblock %}
+{% block content %}
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+  <h2 style="margin: 0;">Work Order Board</h2>
+  <a class="btn secondary" href="/work_orders">List view</a>
+</div>
+
+<div class="kanban">
+  {% for col_status in ["Icebox", "Open", "Queued", "In Progress", "Done"] %}
+  <div class="kanban-col" data-status="{{ col_status }}">
+    <div class="kanban-col-header">
+      {{ col_status }}
+      <span class="kanban-count">{{ board[col_status]|length }}</span>
+    </div>
+    <div class="kanban-cards"
+         ondragover="event.preventDefault(); this.classList.add('drag-over')"
+         ondragleave="this.classList.remove('drag-over')"
+         ondrop="handleDrop(event, '{{ col_status }}'); this.classList.remove('drag-over')">
+      {% for wo in board[col_status] %}
+      <div class="kanban-card"
+           draggable="true"
+           data-wo-id="{{ wo.id }}"
+           ondragstart="event.dataTransfer.setData('text/plain', '{{ wo.id }}')">
+        <div class="kanban-card-title">
+          <a href="/work_orders/{{ wo.id }}/edit">#{{ wo.id }}</a> {{ wo.title }}
+        </div>
+        <div class="kanban-card-meta">
+          {% if wo.priority == "Urgent" %}
+            <span class="badge urgent">Urgent</span>
+          {% elif wo.priority == "High" %}
+            <span class="badge high">High</span>
+          {% else %}
+            <span class="kanban-priority">{{ wo.priority }}</span>
+          {% endif %}
+          {% if wo.due_date %}
+            <span class="kanban-due">{{ wo.due_date }}</span>
+          {% endif %}
+        </div>
+        {% if wo.asset_name or wo.location_name %}
+        <div class="kanban-card-detail">
+          {{ wo.location_name or "" }}{% if wo.asset_name and wo.location_name %} · {% endif %}{{ wo.asset_name or "" }}
+        </div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<script>
+async function handleDrop(event, newStatus) {
+  event.preventDefault();
+  const woId = event.dataTransfer.getData('text/plain');
+  const card = document.querySelector(`[data-wo-id="${woId}"]`);
+
+  if (!card) return;
+
+  // Move the card to the new column immediately (optimistic update)
+  const targetCards = event.currentTarget;
+  targetCards.appendChild(card);
+
+  // Update column counts
+  updateCounts();
+
+  // Send the status change to the server
+  try {
+    const response = await fetch(`/api/work_orders/${woId}/status`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({status: newStatus}),
+    });
+
+    if (!response.ok) {
+      // Reload the page if the update failed
+      window.location.reload();
+    }
+  } catch (err) {
+    window.location.reload();
+  }
+}
+
+function updateCounts() {
+  document.querySelectorAll('.kanban-col').forEach(col => {
+    const count = col.querySelectorAll('.kanban-card').length;
+    col.querySelector('.kanban-count').textContent = count;
+  });
+}
+</script>
+
+{% endblock %}

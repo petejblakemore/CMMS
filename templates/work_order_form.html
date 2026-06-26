@@ -1,0 +1,80 @@
+<!-- templates/work_order_form.html -->
+{% extends "base.html" %} {% block title %}New work order – Home CMMS{% endblock
+%} {% block content %}
+<h2>New work order</h2>
+
+<form method="post">
+    <input
+        type="hidden"
+        name="csrftoken"
+        value="{{ request.state.csrftoken }}"
+    />
+    <div class="form-row">
+        <label for="title">Title</label>
+        <input id="title" name="title" type="text" required />
+    </div>
+
+    <div class="form-row">
+        <label for="description">Description</label>
+        <textarea id="description" name="description"></textarea>
+    </div>
+
+    <div class="form-row">
+        <label for="asset_id">Asset</label>
+        <select id="asset_id" name="asset_id">
+            <option value="0">(none)</option>
+            {% for a in assets %}
+            <option value="{{ a.id }}">
+                {{ a.location_name }} – {{ a.name }}
+            </option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="location_id">Location</label>
+        <select id="location_id" name="location_id">
+            <option value="0">(none)</option>
+            {% for l in locations %}
+            <option value="{{ l.id }}">{{ l.name }}</option>
+            {% endfor %}
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="status">Status</label>
+        <select id="status" name="initial_status">
+            <option value="Open" selected>Open</option>
+            <option value="Queued">Queued</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Done">Done</option>
+            <option value="Cancelled">Cancelled</option>
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="priority">Priority</label>
+        <select id="priority" name="priority">
+            <option value="Low">Low</option>
+            <option value="Normal" selected>Normal</option>
+            <option value="High">High</option>
+            <option value="Urgent">Urgent</option>
+        </select>
+    </div>
+
+    <div class="form-row">
+        <label for="due_date">Due date</label>
+        <input id="due_date" name="due_date" type="date" />
+    </div>
+
+    <div class="form-row">
+        <label for="source">Source</label>
+        <input id="source" name="source" type="text" value="Manual" />
+    </div>
+
+    <div class="form-actions">
+        <button class="btn" type="submit">Save</button>
+        <a class="btn secondary" href="/work_orders">Cancel</a>
+    </div>
+</form>
+{% endblock %}

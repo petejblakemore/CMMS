@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}New Maintenance Plan – Home CMMS{% endblock %}
+{% block content %}
+<h2>New Maintenance Plan</h2>
+
+{% if error %}
+  <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+<form method="post">
+
+  <div class="form-row">
+    <label for="title">Title *</label>
+    <input type="text" id="title" name="title" required placeholder="e.g. Annual boiler service">
+  </div>
+
+  <div class="form-row">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3"></textarea>
+  </div>
+
+  <div class="form-row">
+    <label for="asset_id">Asset</label>
+    <select id="asset_id" name="asset_id">
+      <option value="0">(none)</option>
+      {% for a in assets %}
+        <option value="{{ a.id }}">{{ a.location_name }} – {{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="location_id">Location</label>
+    <select id="location_id" name="location_id">
+      <option value="0">(none — use asset's location)</option>
+      {% for l in locations %}
+        <option value="{{ l.id }}">{{ l.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="frequency_value">Every *</label>
+    <input type="number" id="frequency_value" name="frequency_value" min="1" value="1" required style="max-width: 5rem;">
+    <select id="frequency_unit" name="frequency_unit">
+      <option value="day">day(s)</option>
+      <option value="month" selected>month(s)</option>
+      <option value="year">year(s)</option>
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="next_due_date">First due date</label>
+    <input type="date" id="next_due_date" name="next_due_date">
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Create plan</button>
+    <a class="btn secondary" href="/maintenance">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}

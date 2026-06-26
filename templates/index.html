@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard – Home CMMS{% endblock %}
+
+{% block content %}
+<h2>Overview</h2>
+
+<div class="stack">
+  <div>
+    <h3>Open work orders</h3>
+    {% if open_wos %}
+      <table>
+        <tr>
+          <th>ID</th><th>Title</th><th>Priority</th><th>Due</th><th>Location</th><th>Asset</th>
+        </tr>
+        {% for wo in open_wos %}
+          <tr>
+            <td>{{ wo.work_order_id }}</td>
+            <td>{{ wo.title }}</td>
+            <td>
+              {% if wo.priority == "High" %}
+                <span class="badge high">High</span>
+              {% elif wo.priority == "Urgent" %}
+                <span class="badge urgent">Urgent</span>
+              {% else %}
+                {{ wo.priority }}
+              {% endif %}
+            </td>
+            <td>{{ wo.due_date or "" }}</td>
+            <td>{{ wo.location_name or "" }}</td>
+            <td>{{ wo.asset_name or "" }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p>No open work orders. Enjoy the calm.</p>
+    {% endif %}
+    <p><a class="btn" href="/work_orders/new">New work order</a></p>
+  </div>
+
+  <div>
+    <h3>Upcoming preventive maintenance</h3>
+    <form method="post" action="/maintenance/generate" style="margin-bottom: 0.5rem;">
+      <button class="btn" type="submit">Generate Work Orders for Overdue PMs</button>
+    </form>
+    {% if upcoming_pm %}
+      <table>
+        <tr>
+          <th>Due</th><th>Plan</th><th>Asset</th><th>Location</th>
+        </tr>
+        {% for pm in upcoming_pm %}
+          <tr>
+            <td>{{ pm.next_due_date }}</td>
+            <td>{{ pm.title }}</td>
+            <td>{{ pm.asset_name }}</td>
+            <td>{{ pm.location_name }}</td>
+          </tr>
+        {% endfor %}
+      </table>
+    {% else %}
+      <p>No upcoming PM in the next 90 days.</p>
+    {% endif %}
+  </div>
+</div>
+
+<div class="stack">
+  <div>
+    <h3>Open Work Orders by Location</h3>
+    {% if location_wo_counts %}
+    <table>
+      <thead>
+        <tr>
+          <th>Location</th>
+          <th>Open WOs</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for loc in location_wo_counts %}
+        <tr>
+          <td>{{ loc.location_name }}</td>
+          <td><a href="/work_orders?location={{ loc.location_name }}">{{ loc.wo_count }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No open work orders at any location.</p>
+    {% endif %}
+    <p><a class="btn secondary" href="/locations">Manage locations</a></p>
+  </div>
+
+  <div>
+    <h3>Open Work Orders by Asset</h3>
+    {% if asset_wo_counts %}
+    <table>
+      <thead>
+        <tr>
+          <th>Asset</th>
+          <th>Open WOs</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for a in asset_wo_counts %}
+        <tr>
+          <td>{{ a.asset_name }}</td>
+          <td><a href="/work_orders?asset={{ a.asset_name }}">{{ a.wo_count }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p>No open work orders against any asset.</p>
+    {% endif %}
+    <p><a class="btn secondary" href="/assets">Manage assets</a></p>
+  </div>
+</div>
+
+{% endblock %}

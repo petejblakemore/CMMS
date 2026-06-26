@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Users – Home CMMS{% endblock %}
+{% block content %}
+<h2>Users</h2>
+
+<p><a href="/users/new">Add a new user</a></p>
+
+<table>
+  <thead>
+    <tr>
+      <th>Username</th>
+      <th>Display name</th>
+      <th>Created</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for u in users %}
+      <tr>
+        <td><a href="/users/{{ u.id }}/edit">{{ u.username }}</a></td>
+        <td>{{ u.display_name or "" }}</td>
+        <td>{{ u.created_at or "" }}</td>
+      </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

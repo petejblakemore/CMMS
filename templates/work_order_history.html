@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Work Order History – Home CMMS{% endblock %}
+{% block content %}
+<h2>Work Order History</h2>
+
+<form method="get" class="form-row" style="flex-wrap: wrap; margin-bottom: 0.5rem;">
+  <input type="text" name="wo_id" value="{{ f_wo_id }}" placeholder="WO # or title" style="max-width: 10rem;">
+
+  <select name="old_status">
+    <option value="">From status...</option>
+    {% for s in statuses %}
+      <option value="{{ s }}" {% if f_old_status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="new_status">
+    <option value="">To status...</option>
+    {% for s in statuses %}
+      <option value="{{ s }}" {% if f_new_status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <input type="date" name="date_from" value="{{ f_date_from }}" title="From date">
+  <input type="date" name="date_to" value="{{ f_date_to }}" title="To date">
+
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn secondary" href="/work_orders/history">Clear</a>
+</form>
+
+{% if history %}
+<table>
+  <thead>
+    <tr>
+      <th>WO #</th>
+      <th>Title</th>
+      <th>From</th>
+      <th>To</th>
+      <th>When</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for h in history %}
+    <tr>
+      <td><a href="/work_orders/{{ h.work_order_id }}/edit">{{ h.work_order_id }}</a></td>
+      <td>{{ h.wo_title or "" }}</td>
+      <td>{{ h.old_status or "" }}</td>
+      <td>{{ h.new_status or "" }}</td>
+      <td>{{ h.event_time or "" }}</td>
+      <td>{{ h.note or "" }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No history records match the current filters.</p>
+{% endif %}
+
+<p style="margin-top: 1rem;">
+  <a class="btn secondary" href="/work_orders">Back to work orders</a>
+</p>
+{% endblock %}

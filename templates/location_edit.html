@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}Edit Location #{{ location.id }} – Home CMMS{% endblock %}
+{% block content %}
+<h2>Edit Location #{{ location.id }}</h2>
+
+<form method="post">
+
+  <div class="form-row">
+    <label for="name">Name *</label>
+    <input type="text" id="name" name="name" value="{{ location.name }}" required>
+  </div>
+
+  <div class="form-row">
+    <label for="description">Description</label>
+    <textarea id="description" name="description" rows="3">{{ location.description or '' }}</textarea>
+  </div>
+
+  <div class="form-row">
+    <label for="parent_id">Parent location</label>
+    <select id="parent_id" name="parent_id">
+      <option value="0">(none – top level)</option>
+      {% for p in parents %}
+        <option value="{{ p.id }}" {% if location.parent_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="form-row">
+    <label for="active">Active</label>
+    <select id="active" name="active">
+      <option value="1" {% if location.active %}selected{% endif %}>Yes</option>
+      <option value="0" {% if not location.active %}selected{% endif %}>No</option>
+    </select>
+  </div>
+
+  <div class="form-actions">
+    <button class="btn" type="submit">Save changes</button>
+    <a class="btn secondary" href="/locations">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}

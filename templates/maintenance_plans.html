@@ -1,0 +1,85 @@
+{% extends "base.html" %}
+{% block title %}Maintenance Plans – Home CMMS{% endblock %}
+{% block content %}
+<h2>Maintenance Plans</h2>
+
+<p>
+  <a href="/maintenance/new">Add new plan</a>
+</p>
+
+<form method="get" class="form-row" style="flex-wrap: wrap; margin-bottom: 0.5rem;">
+  <select name="location">
+    <option value="">All locations</option>
+    {% for loc in locations_list %}
+      <option value="{{ loc }}" {% if f_location == loc %}selected{% endif %}>{{ loc }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="asset">
+    <option value="">All assets</option>
+    {% for a in assets_list %}
+      <option value="{{ a }}" {% if f_asset == a %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+
+  <label style="font-size: 0.85rem; display: flex; align-items: center; gap: 0.3rem;">
+    <input type="checkbox" name="show_inactive" value="1" {% if show_inactive %}checked{% endif %}> Show inactive
+  </label>
+
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn secondary" href="/maintenance">Clear</a>
+</form>
+
+{% if plans %}
+<table>
+  <thead>
+    <tr>
+      <th>Title</th>
+      <th>Asset</th>
+      <th>Location</th>
+      <th>Frequency</th>
+      <th>Next Due</th>
+      <th>Last Done</th>
+      <th>Status</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in plans %}
+    <tr>
+      <td><a href="/maintenance/{{ p.id }}/edit">{{ p.title }}</a></td>
+      <td>{{ p.asset_name or "" }}</td>
+      <td>{{ p.location_name or "" }}</td>
+      <td>Every {{ p.frequency_value }} {{ p.frequency_unit }}(s)</td>
+      <td>
+        {% if p.overdue %}
+          <span class="badge urgent">{{ p.next_due_date }} — OVERDUE</span>
+        {% else %}
+          {{ p.next_due_date or "Not set" }}
+        {% endif %}
+      </td>
+      <td>{{ p.last_done_date or "Never" }}</td>
+      <td>
+        {% if not p.active %}
+          <span class="badge">Inactive</span>
+        {% elif p.overdue %}
+          <span class="badge urgent">Overdue</span>
+        {% else %}
+          Active
+        {% endif %}
+      </td>
+      <td>
+        {% if p.active %}
+          <form method="post" action="/maintenance/{{ p.id }}/complete" style="display: inline;">
+            <button class="btn" type="submit" style="font-size: 0.8rem; padding: 0.2rem 0.5rem;">Complete</button>
+          </form>
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No maintenance plans match the current filters.</p>
+{% endif %}
+{% endblock %}

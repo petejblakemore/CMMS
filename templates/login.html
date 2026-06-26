@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8" />
+        <title>Login – Home CMMS</title>
+        <link rel="stylesheet" href="/static/style.css" />
+        <style>
+            body {
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                min-height: 100vh;
+            }
+            .login-card {
+                background: #fff;
+                padding: 2rem;
+                border-radius: 6px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+                width: 100%;
+                max-width: 22rem;
+            }
+            .login-card h1 {
+                font-size: 1.2rem;
+                margin: 0 0 0.25rem;
+            }
+            .login-card p.subtitle {
+                color: #6b7280;
+                font-size: 0.85rem;
+                margin: 0 0 1.5rem;
+            }
+            .login-card label {
+                display: block;
+                font-weight: 600;
+                font-size: 0.9rem;
+                margin-bottom: 0.2rem;
+            }
+            .login-card input[type="text"],
+            .login-card input[type="password"] {
+                width: 100%;
+                padding: 0.4rem;
+                font-size: 0.9rem;
+                border: 1px solid #d1d5db;
+                border-radius: 4px;
+                box-sizing: border-box;
+                margin-bottom: 0.8rem;
+            }
+            .login-card button {
+                width: 100%;
+                padding: 0.5rem;
+            }
+            .login-error {
+                background: #fee2e2;
+                color: #b91c1c;
+                padding: 0.4rem 0.6rem;
+                border-radius: 4px;
+                font-size: 0.85rem;
+                margin-bottom: 1rem;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="login-card">
+            <h1>Maintenance – Plas Gwernoer</h1>
+            <p class="subtitle">Sign in to continue</p>
+
+            {% if error %}
+            <div class="login-error">{{ error }}</div>
+            {% endif %}
+
+            <form method="post" action="/login">
+                <input
+                    type="hidden"
+                    name="csrftoken"
+                    value="{{ request.state.csrftoken }}"
+                />
+                <label for="username">Username</label>
+                <input
+                    type="text"
+                    id="username"
+                    name="username"
+                    required
+                    autofocus
+                />
+
+                <label for="password">Password</label>
+                <input type="password" id="password" name="password" required />
+
+                <button class="btn" type="submit">Sign in</button>
+            </form>
+        </div>
+    </body>
+</html>

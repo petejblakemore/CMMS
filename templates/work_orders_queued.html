@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}Queued work orders – Home CMMS{% endblock %}
+
+{% block content %}
+<h2>Queued work orders</h2>
+
+<p>
+  <a class="btn secondary" href="/work_orders">Back to work orders</a>
+</p>
+
+<form method="get" class="form-row" style="flex-wrap: wrap; margin-bottom: 0.5rem;">
+  <select name="priority">
+    <option value="">All priorities</option>
+    {% for p in q_priorities_list %}
+      <option value="{{ p }}" {% if f_priority == p %}selected{% endif %}>{{ p }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="location">
+    <option value="">All locations</option>
+    {% for loc in q_locations_list %}
+      <option value="{{ loc }}" {% if f_location == loc %}selected{% endif %}>{{ loc }}</option>
+    {% endfor %}
+  </select>
+
+  <select name="asset">
+    <option value="">All assets</option>
+    {% for a in q_assets_list %}
+      <option value="{{ a }}" {% if f_asset == a %}selected{% endif %}>{{ a }}</option>
+    {% endfor %}
+  </select>
+
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="direction" value="{{ direction }}">
+
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn secondary" href="/work_orders/queued">Clear</a>
+</form>
+
+{% if queued_wos %}
+  <table>
+    <tr>
+      <th><a href="?sort=id&direction={{ 'asc' if sort != 'id' or direction == 'desc' else 'desc' }}&priority={{ f_priority }}&location={{ f_location }}&asset={{ f_asset }}">ID</a></th>
+      <th><a href="?sort=title&direction={{ 'asc' if sort != 'title' or direction == 'desc' else 'desc' }}&priority={{ f_priority }}&location={{ f_location }}&asset={{ f_asset }}">Title</a></th>
+      <th>Status</th>
+      <th><a href="?sort=priority&direction={{ 'asc' if sort != 'priority' or direction == 'desc' else 'desc' }}&priority={{ f_priority }}&location={{ f_location }}&asset={{ f_asset }}">Priority</a></th>
+      <th><a href="?sort=due_date&direction={{ 'asc' if sort != 'due_date' or direction == 'desc' else 'desc' }}&priority={{ f_priority }}&location={{ f_location }}&asset={{ f_asset }}">Due</a></th>
+      <th><a href="?sort=location&direction={{ 'asc' if sort != 'location' or direction == 'desc' else 'desc' }}&priority={{ f_priority }}&location={{ f_location }}&asset={{ f_asset }}">Location</a></th>
+      <th><a href="?sort=asset&direction={{ 'asc' if sort != 'asset' or direction == 'desc' else 'desc' }}&priority={{ f_priority }}&location={{ f_location }}&asset={{ f_asset }}">Asset</a></th>
+      <th>Actions</th>
+    </tr>
+    {% for wo in queued_wos %}
+      <tr>
+        <td><a href="/work_orders/{{ wo.work_order_id }}/edit">{{ wo.work_order_id }}</a></td>
+        <td>{{ wo.title }}</td>
+        <td>{{ wo.status }}</td>
+        <td>
+          {% if wo.priority == "High" %}
+            <span class="badge high">High</span>
+          {% elif wo.priority == "Urgent" %}
+            <span class="badge urgent">Urgent</span>
+          {% else %}
+            {{ wo.priority }}
+          {% endif %}
+        </td>
+        <td>{{ wo.due_date or "" }}</td>
+        <td>{{ wo.location_name or "" }}</td>
+        <td>{{ wo.asset_name or "" }}</td>
+        <td>
+          <form method="post" action="/work_orders/{{ wo.work_order_id }}/status">
+            <select name="new_status">
+              <option value="Queued" {% if wo.status == "Queued" %}selected{% endif %}>Queued</option>
+              <option value="Open">Open</option>
+              <option value="In Progress">In Progress</option>
+              <option value="Done">Done</option>
+              <option value="Cancelled">Cancelled</option>
+            </select>
+            <input type="date" name="due_date" value="{{ wo.due_date or '' }}" style="width: 9rem;">
+            <input type="text" name="note" placeholder="Note (optional)" style="width: 8rem;">
+            <button class="btn" type="submit">Update</button>
+          </form>
+        </td>
+      </tr>
+    {% endfor %}
+  </table>
+{% else %}
+  <p>No queued work orders match the current filters.</p>
+{% endif %}
+{% endblock %}

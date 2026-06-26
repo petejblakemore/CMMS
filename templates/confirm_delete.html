@@ -1,0 +1,27 @@
+{% extends "base.html" %}
+{% block title %}Confirm Delete – Home CMMS{% endblock %}
+{% block content %}
+<h2>{{ heading }}</h2>
+
+<div class="card" style="max-width: 30rem;">
+  <p><strong>{{ message }}</strong></p>
+
+  {% if warning %}
+    <p style="color: #b91c1c;">{{ warning }}</p>
+  {% endif %}
+
+  {% if details %}
+    <ul class="item-bullets">
+      {% for detail in details %}
+        <li>{{ detail }}</li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+  <div style="margin-top: 1rem; display: flex; gap: 0.5rem; align-items: center;">
+    <form method="post">
+      <button class="btn" type="submit" style="background: #b91c1c; border-color: #b91c1c;">Yes, delete</button>
+    </form>
+    <a class="btn secondary" href="{{ cancel_url }}" style="padding: 0.3rem 0.7rem;">Cancel</a>
+  </div>
+{% endblock %}
