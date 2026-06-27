@@ -5,10 +5,10 @@ A self-hosted Computerized Maintenance Management System for the Plas Gwernoer e
 ## What it manages
 
 - **Locations** — hierarchical (Plas Gwernoer → Workshop, Farm, Vehicles, etc.)
-- **Assets** — equipment and property items at each location
-- **Work orders** — with status tracking, priority, due dates, and full audit history
+- **Assets** — equipment and property items at each location with cost and vendor tracking
+- **Work orders** — with status tracking, priority, due dates, Kanban board, and full audit history
+- **Planned maintenance** — recurring schedules with job plan steps
 - **Users** — multi-user access with bcrypt-hashed passwords
-- **Preventive maintenance plans** — scheduled recurring tasks (planned)
 
 ## Prerequisites
 
@@ -23,14 +23,15 @@ git clone https://github.com/petejblakemore/CMMS.git
 cd CMMS
 
 # Create a virtual environment (recommended)
-python3 -m venv venv
-source venv/bin/activate
+python3 -m venv .venv
+source .venv/bin/activate
 
 # Install dependencies
 pip install -r requirements.txt
 
 # Initialise the database (first time only)
-sqlite3 cmms.db < cmms_schema.sql
+mkdir -p data
+sqlite3 data/cmms.db < cmms_schema.sql
 
 # Generate a secret key
 python3 -c "import secrets; print(secrets.token_hex(32))"
@@ -52,43 +53,33 @@ CMMS/
 ├── routes/
 │   ├── __init__.py
 │   ├── auth.py             # Login, logout, first-run setup
-│   ├── dashboard.py        # Home page
+│   ├── dashboard.py        # Home page with operational overview
 │   ├── locations.py        # Location CRUD + soft delete
 │   ├── assets.py           # Asset CRUD + CSV import + delete
-│   ├── work_orders.py      # Work order CRUD + status updates + delete
+│   ├── work_orders.py      # Work order CRUD + board + history + delete
+│   ├── maintenance.py      # Planned maintenance + job plan steps
 │   └── users.py            # User management (create, edit, delete)
-├── templates/
-│   ├── base.html           # Shared layout with nav
-│   ├── index.html          # Dashboard
-│   ├── login.html          # Login page
-│   ├── setup.html          # First-run admin setup
-│   ├── confirm_delete.html # Shared delete confirmation
-│   ├── locations.html
-│   ├── location_form.html
-│   ├── location_edit.html
-│   ├── assets.html
-│   ├── asset_form.html
-│   ├── asset_edit.html
-│   ├── asset_import.html
-│   ├── work_orders.html
-│   ├── work_orders_queued.html
-│   ├── work_order_form.html
-│   ├── work_order_edit.html
-│   ├── users.html
-│   ├── user_form.html
-│   └── user_edit.html
+├── templates/              # Jinja2 HTML templates
 ├── static/
-│   └── style.css
+│   └── style.css           # Sidebar layout + Kanban board styles
+├── data/                   # Database and runtime files (gitignored)
+│   ├── cmms.db             # SQLite database
+│   ├── asset_import.log    # CSV import activity log
+│   └── *.pem               # SSL certificates (production only)
+├── documents/              # Project documentation
 ├── imports/
 │   └── asset.csv           # Sample CSV for asset import
-├── cmms_schema.sql         # Full database schema (tables, views, indexes)
-├── rebuild_cmms.db.sql     # Rebuild script for fresh database
-├── regenkey.sh             # Generate a new secret key
-├── startup.sh              # Server start script
+├── cmms_schema.sql         # Full database schema
 └── requirements.txt
 ```
 
 ## Features
+
+### Dashboard
+- Open work orders count by location (click to filter)
+- Open work orders count by asset (click to filter)
+- Upcoming preventive maintenance with "Generate Work Orders" button
+- Priority-sorted open work orders list
 
 ### Locations
 - Hierarchical tree structure with parent-child relationships
@@ -100,18 +91,31 @@ CMMS/
 - Full CRUD with sortable, filterable list views
 - Filter by location, category, status, or manufacturer
 - Category and type fields with auto-suggest from existing values
+- Cost and vendor tracking
+- Colour-coded status badges (Running / Needs Maintenance / Out of Service)
 - CSV bulk import with duplicate detection and logging
 - Cannot delete an asset with open work orders
 
 ### Work orders
-- Status workflow: Open → In Progress → Done (also Queued and Cancelled)
+- Status workflow: Icebox → Open → Queued → In Progress → Done (also Cancelled)
 - Priority levels: Low, Normal, High, Urgent (with correct sort ordering)
+- Grouped list view with separate sections per status
+- **Kanban board** with drag-and-drop status changes
 - Inline status and due date updates from the list view
 - Full edit screen via click on work order ID
-- Separate queued work orders view with filtering
 - Status change audit trail in `work_order_history`
+- Searchable/filterable history page
 - Server-side validation on status and priority values
 - Completed work orders cannot be deleted
+- Cancelled work orders in a collapsible section
+
+### Planned maintenance
+- Create recurring maintenance plans against assets or locations
+- Configurable frequency (every N days/months/years)
+- Job plan steps with notes for tools/materials
+- "Complete" action advances the due date and creates a work order
+- "Generate Work Orders" button on dashboard batch-processes overdue PMs
+- Work orders created from PMs include job plan steps in the description
 
 ### Users
 - Create, edit, and delete user accounts
@@ -120,30 +124,23 @@ CMMS/
 
 ## Database
 
-SQLite database with 6 tables:
+SQLite database with 7 tables:
 
 | Table | Purpose |
 |-------|---------|
 | `locations` | Hierarchical location tree with active/inactive flag |
-| `assets` | Equipment and property items linked to locations |
+| `assets` | Equipment with cost, vendor, and status tracking |
 | `work_orders` | Maintenance tasks with status, priority, and due dates |
 | `work_order_history` | Audit trail of all status changes |
-| `maintenance_plans` | Recurring maintenance schedules (planned) |
+| `maintenance_plans` | Recurring maintenance schedules |
+| `job_plan_steps` | Checklist steps for maintenance plans |
 | `users` | Login credentials with bcrypt-hashed passwords |
 
-4 views join related tables for list pages:
-- `v_assets` — assets with location names
-- `v_open_work_orders` — open, in-progress, and queued work orders
+Views:
+- `v_assets` — assets with location names, cost, and vendor
+- `v_open_work_orders` — open, in-progress, queued, and icebox work orders
 - `v_queued_work_orders` — queued work orders only
 - `v_upcoming_pm` — preventive maintenance tasks due within 90 days
-
-### Schema changes
-
-The schema file (`cmms_schema.sql`) is a full rebuild script. To apply changes to an existing database without losing data, run individual ALTER/CREATE statements directly:
-
-```bash
-sqlite3 cmms.db "ALTER TABLE ..."
-```
 
 ## CSV asset import
 
@@ -154,7 +151,7 @@ Upload a CSV at `/assets/import`. Required columns (case-insensitive):
 
 Optional columns: `CATEGORY`, `TYPE`, `MANUFACTURER`, `MODEL`, `SERIAL #`, `DATE PURCHASED`, `WARRANTY ENDS`, `NOTES`
 
-Duplicate assets (same name + location) are skipped. Import activity is logged to `asset_import.log`.
+Duplicate assets (same name + location) are skipped. Import activity is logged to `data/asset_import.log`.
 
 ## Authentication
 
@@ -163,26 +160,35 @@ Session-based login with bcrypt password hashing. Sessions last 7 days.
 - First run redirects to `/setup` to create the admin account
 - All pages require authentication except `/login` and `/setup`
 - Set `CMMS_SECRET_KEY` environment variable for session signing
-- Use `regenkey.sh` to generate a new secret key
 - Never commit your secret key to the repository
 
 ## Deployment
 
 ### Local development
+
 ```bash
+export CMMS_SECRET_KEY="dev-key"
 uvicorn cmms_ui:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-### LAN server
+### LAN server with HTTPS
+
+See `documents/SSL_SETUP.md` for full instructions using `mkcert`.
+
 ```bash
 export CMMS_SECRET_KEY="your-secret-key"
-uvicorn cmms_ui:app --host 0.0.0.0 --port 8000 --reload
+uvicorn cmms_ui:app --host 0.0.0.0 --port 8000 --reload \
+  --ssl-keyfile=data/192.168.1.224+3-key.pem \
+  --ssl-certfile=data/192.168.1.224+3.pem
 ```
 
-Or use the provided `startup.sh` script.
+### Dev → Production workflow
 
-### Synology NAS
-Deploy using Docker or a Python virtual environment. Set `CMMS_SECRET_KEY` in your container environment and bind to port 8000.
+See `documents/GIT_WORKFLOW.md` for the full push/pull workflow between machines.
+
+1. Edit and test on Mac Mini (`localhost:8000`)
+2. Commit and push to GitHub
+3. Pull on iMac (production server)
 
 ## License
 
