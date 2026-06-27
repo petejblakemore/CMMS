@@ -13,6 +13,10 @@
   {% for loc in nodes %}
     <li>
         <a href="/locations/{{ loc.id }}/edit">{{ loc.name }}</a>
+        {# ADDED: inline "work orders" link — opens /work_orders filtered to this
+           location. Rendered at every level of the hierarchy (estate → rooms).
+           urlencode handles location names that contain spaces or special chars. #}
+        <a href="/work_orders?location={{ loc.name | urlencode }}" style="font-size: 0.8rem; margin-left: 0.5rem; color: #6b7280;">work orders</a>
       {% if loc.children %}
         {{ render_locations(loc.children) }}
       {% endif %}

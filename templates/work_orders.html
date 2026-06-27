@@ -3,6 +3,20 @@
 {% block content %}
 <h2>Work orders</h2>
 
+{# ADDED: active-filter banner (fix for issue #30).
+   Shown only when ?location= or ?asset= is set. Tells the user what is
+   filtered and provides a "Clear filter" link back to the unfiltered list.
+   filter_location / filter_asset are supplied by the list_work_orders route. #}
+{% if filter_location or filter_asset %}
+<div class="filter-banner">
+  Showing work orders for
+  {% if filter_location %}<strong>location: {{ filter_location }}</strong>{% endif %}
+  {% if filter_location and filter_asset %} / {% endif %}
+  {% if filter_asset %}<strong>asset: {{ filter_asset }}</strong>{% endif %}
+  &nbsp;—&nbsp;<a href="/work_orders">Clear filter</a>
+</div>
+{% endif %}
+
 <p><a class="btn" href="/work_orders/new">New work order</a></p>
 
 {% macro wo_table(wos) %}

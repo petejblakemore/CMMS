@@ -16,50 +16,84 @@ router = APIRouter()
 
 
 # --- List all work orders (grouped by status) --------------------------------
+#
+# ADDED: optional ?location= and ?asset= query parameters (fix for issue #30).
+# Dashboard "Open WOs by Location/Asset" links now pre-filter this view.
+# The same filter is applied to every status group (Open, In Progress, Queued,
+# Icebox, Done, Cancelled) so the whole page is scoped to the chosen entity.
+# filter_location / filter_asset are passed to the template so it can display
+# an active-filter banner with a "Clear filter" link.
 
 @router.get("/work_orders")
 async def list_work_orders(
     request: Request,
+    # ADDED: location and asset are optional query params — both default to None
+    # (no filter). Populated by dashboard links, the Assets "View" column, and
+    # the Locations "work orders" links.
+    location: Optional[str] = Query(None),
+    asset: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    open_wos = dicts(db.execute(
-        "SELECT * FROM v_open_work_orders WHERE status = 'Open' ORDER BY "
-        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
+    priority_order = (
+        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 "
+        "WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
         "due_date IS NULL, due_date"
-    ))
-
-    in_progress_wos = dicts(db.execute(
-        "SELECT * FROM v_open_work_orders WHERE status = 'In Progress' ORDER BY "
-        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
-        "due_date IS NULL, due_date"
-    ))
-
-    queued_wos = dicts(db.execute(
-        "SELECT * FROM v_open_work_orders WHERE status = 'Queued' ORDER BY "
-        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
-        "due_date IS NULL, due_date"
-    ))
-
-    icebox_wos = dicts(db.execute(
-        "SELECT * FROM v_open_work_orders WHERE status = 'Icebox' ORDER BY "
-        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
-        "due_date IS NULL, due_date"
-    ))
-
-    closed_wos = dicts(
-        db.execute(
-            "SELECT * FROM work_orders "
-            "WHERE status = 'Done' "
-            "ORDER BY completed_at DESC LIMIT 50"
-        )
     )
-    cancelled_wos = dicts(
-        db.execute(
-            "SELECT * FROM work_orders "
-            "WHERE status = 'Cancelled' "
-            "ORDER BY created_at DESC LIMIT 50"
-        )
-    )
+
+    # ADDED: build a reusable SQL fragment and params list from whichever
+    # filters are active. Empty string = no filter = show all.
+    filter_sql = ""
+    filter_params: list = []
+    if location:
+        filter_sql += " AND location_name = ?"
+        filter_params.append(location)
+    if asset:
+        filter_sql += " AND asset_name = ?"
+        filter_params.append(asset)
+
+    # ADDED: inner helper so the same filter applies to every status bucket
+    # without duplicating the query four times.
+    def fetch(status: str):
+        return dicts(db.execute(
+            f"SELECT * FROM v_open_work_orders WHERE status = ?{filter_sql} ORDER BY {priority_order}",
+            [status] + filter_params,
+        ))
+
+    open_wos       = fetch("Open")
+    in_progress_wos = fetch("In Progress")
+    queued_wos     = fetch("Queued")
+    icebox_wos     = fetch("Icebox")
+
+    # ADDED: Done/Cancelled live in the base work_orders table (not the view),
+    # so when a filter is active we JOIN to assets/locations to apply it.
+    # When no filter is active we use the simpler original queries.
+    if filter_sql:
+        closed_wos = dicts(db.execute(
+            "SELECT w.* FROM work_orders w "
+            "LEFT JOIN assets a ON a.id = w.asset_id "
+            "LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id) "
+            f"WHERE w.status = 'Done'{'' if not location else ' AND l.name = ?'}"
+            f"{'' if not asset else ' AND a.name = ?'} "
+            "ORDER BY w.completed_at DESC LIMIT 50",
+            ([location] if location else []) + ([asset] if asset else []),
+        ))
+        cancelled_wos = dicts(db.execute(
+            "SELECT w.* FROM work_orders w "
+            "LEFT JOIN assets a ON a.id = w.asset_id "
+            "LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id) "
+            f"WHERE w.status = 'Cancelled'{'' if not location else ' AND l.name = ?'}"
+            f"{'' if not asset else ' AND a.name = ?'} "
+            "ORDER BY w.created_at DESC LIMIT 50",
+            ([location] if location else []) + ([asset] if asset else []),
+        ))
+    else:
+        # Original unfiltered queries — unchanged from before
+        closed_wos = dicts(db.execute(
+            "SELECT * FROM work_orders WHERE status = 'Done' ORDER BY completed_at DESC LIMIT 50"
+        ))
+        cancelled_wos = dicts(db.execute(
+            "SELECT * FROM work_orders WHERE status = 'Cancelled' ORDER BY created_at DESC LIMIT 50"
+        ))
 
     return templates.TemplateResponse(
         "work_orders.html",
@@ -70,7 +104,10 @@ async def list_work_orders(
             "queued_wos": queued_wos,
             "icebox_wos": icebox_wos,
             "closed_wos": closed_wos,
-            "cancelled_wos": cancelled_wos
+            "cancelled_wos": cancelled_wos,
+            # ADDED: pass active filter values so the template can show the banner
+            "filter_location": location or "",
+            "filter_asset": asset or "",
         },
     )
 

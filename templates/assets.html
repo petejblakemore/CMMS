@@ -54,6 +54,8 @@
       <th>Serial #</th>
       <th><a href="?sort=purchased&direction={{ 'asc' if sort != 'purchased' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Purchased</a></th>
       <th><a href="?sort=warranty&direction={{ 'asc' if sort != 'warranty' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Warranty ends</a></th>
+      {# ADDED: new column — links to the work orders page filtered by this asset #}
+      <th>Work orders</th>
     </tr>
   </thead>
   <tbody>
@@ -80,6 +82,9 @@
         <td>{{ a.serial_number or "" }}</td>
         <td>{{ a.purchase_date or "" }}</td>
         <td>{{ a.warranty_end_date or "" }}</td>
+             {# ADDED: "View" link → /work_orders?asset=<name> — opens the work orders
+           list pre-filtered to this asset. urlencode handles names with spaces. #}
+        <td><a href="/work_orders?asset={{ a.asset_name | urlencode }}">View</a></td>
       </tr>
     {% endfor %}
   </tbody>

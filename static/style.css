@@ -457,3 +457,21 @@ main ul li { padding: 0.2rem 0; }
   color: #94a3b8;
   margin-top: 0.2rem;
 }
+
+/* ADDED: filter-banner — shown on the Work Orders page when a ?location= or
+   ?asset= query param is active (fix for issue #30). Light blue tint signals
+   that the list is narrowed; the anchor inside ("Clear filter") is bolded so
+   it stands out as the primary action when a filter is active. */
+.filter-banner {
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 6px;
+  padding: 0.6rem 1rem;
+  margin-bottom: 1rem;
+  font-size: 0.9rem;
+  color: #1e40af;
+}
+.filter-banner a {
+  color: #1d4ed8;
+  font-weight: 600;
+}
