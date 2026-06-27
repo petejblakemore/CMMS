@@ -19,10 +19,22 @@ router = APIRouter()
 async def list_locations(request: Request, db: sqlite3.Connection = Depends(get_db)):
     locations_flat = dicts(db.execute("SELECT * FROM locations"))
     location_tree = build_location_tree(locations_flat)
+
+    # Count open work orders per location
+    wo_counts = {
+        r["location_id"]: r["wo_count"]
+        for r in db.execute(
+            "SELECT location_id, COUNT(*) as wo_count FROM work_orders "
+            "WHERE status NOT IN ('Done', 'Cancelled') AND location_id IS NOT NULL "
+            "GROUP BY location_id"
+        )
+    }
+
     return templates.TemplateResponse(
         "locations.html",
-        {"request": request, "locations": location_tree},
+        {"request": request, "locations": location_tree, "wo_counts": wo_counts},
     )
+
 
 
 @router.get("/locations/new")
