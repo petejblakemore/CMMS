@@ -63,7 +63,18 @@
         <td>{{ a.location_name }}</td>
         <td>{{ a.category or "" }}</td>
         <td>{{ a.type or "" }}</td>
-        <td>{{ a.status or "" }}</td>
+        <td>
+          {% if a.status == "Running" %}
+            <span class="badge running">Running</span>
+          {% elif a.status == "Needs Maintenance" %}
+            <span class="badge needs-maintenance">Needs Maintenance</span>
+          {% elif a.status == "Out of Service" %}
+            <span class="badge out-of-service">Out of Service</span>
+          {% else %}
+            {{ a.status or "" }}
+          {% endif %}
+        </td>
+
         <td>{{ a.manufacturer or "" }}</td>
         <td>{{ a.model or "" }}</td>
         <td>{{ a.serial_number or "" }}</td>
