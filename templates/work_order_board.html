@@ -8,7 +8,7 @@
 </div>
 
 <div class="kanban">
-  {% for col_status in ["Icebox", "Open", "Queued", "In Progress", "Done"] %}
+  {% for col_status in ["Icebox","Queued", "Open", "In Progress", "Done"] %}
   <div class="kanban-col" data-status="{{ col_status }}">
     <div class="kanban-col-header">
       {{ col_status }}
