@@ -3,27 +3,35 @@
 %} {% block content %}
 <h2>New location</h2>
 
-<form method="post">
-    <input
-        type="hidden"
-        name="csrftoken"
-        value="{{ request.state.csrftoken }}"
-    />
-    <label for="name">Name</label>
-    <input id="name" name="name" type="text" required />
+<form method="post" style="max-width: 30rem;">
 
-    <label for="parent_id">Parent location (optional)</label>
-    <select id="parent_id" name="parent_id">
-        <option value="0">(none)</option>
+  <div style="margin-bottom: 0.6rem;">
+    <label for="name" style="display: block; margin-bottom: 0.2rem;">Name *</label>
+    <input type="text" id="name" name="name" required style="width: 100%;">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="parent_id" style="display: block; margin-bottom: 0.2rem;">Parent location</label>
+    <select id="parent_id" name="parent_id" style="width: 100%;">
+        <option value="0">(none – top level)</option>
         {% for p in parents %}
         <option value="{{ p.id }}">{{ p.name }}</option>
-        {% endfor %}
-    </select>
+            {% endfor %}
+        </select>
+    </div>
 
-    <label for="description">Description</label>
-    <textarea id="description" name="description"></textarea>
+  <div style="margin-bottom: 0.6rem;">
+    <label for="description" style="display: block; margin-bottom: 0.2rem;">Description</label>
+    <input type="text" id="description" name="description" style="width: 100%;">
+  </div>
 
-    <button class="btn" type="submit">Save</button>
+
+
+  <div style="margin-top: 1rem;">
+    <button class="btn" type="submit">Create location</button>
     <a class="btn secondary" href="/locations">Cancel</a>
+  </div>
+
 </form>
+
 {% endblock %}
