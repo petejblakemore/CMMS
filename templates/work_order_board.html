@@ -41,8 +41,18 @@
         {% if wo.asset_name or wo.location_name %}
         <div class="kanban-card-detail">
           {{ wo.location_name or "" }}{% if wo.asset_name and wo.location_name %} · {% endif %}{{ wo.asset_name or "" }}
+          {% if wo.asset_status %}
+            {% if wo.asset_status == "Running" %}
+              <span class="badge running">{{ wo.asset_status }}</span>
+            {% elif wo.asset_status == "Needs Maintenance" %}
+              <span class="badge needs-maintenance">{{ wo.asset_status }}</span>
+            {% elif wo.asset_status == "Out of Service" %}
+              <span class="badge out-of-service">{{ wo.asset_status }}</span>
+            {% endif %}
+          {% endif %}
         </div>
         {% endif %}
+
       </div>
       {% endfor %}
     </div>

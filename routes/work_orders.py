@@ -180,7 +180,8 @@ async def work_order_board(
         db.execute(
             """
             SELECT w.id, w.title, w.status, w.priority, w.due_date,
-                   a.name AS asset_name, l.name AS location_name
+                   a.name AS asset_name, a.status AS asset_status,
+                   l.name AS location_name
             FROM work_orders w
             LEFT JOIN assets a ON a.id = w.asset_id
             LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id)
