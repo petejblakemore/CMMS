@@ -16,6 +16,16 @@
     </div>
 
     <div class="form-row">
+        <label for="parent_asset_id">Parent asset</label>
+        <select id="parent_asset_id" name="parent_asset_id">
+      <option value="0">(none — top level)</option>
+      {% for pa in parent_assets %}
+        <option value="{{ pa.id }}">{{ pa.name }}</option>
+      {% endfor %}
+    </select>
+    </div>
+
+    <div class="form-row">
         <label for="location_id">Location *</label>
         <select id="location_id" name="location_id" required>
             <option value="">-- Select --</option>
@@ -88,6 +98,7 @@
         <input type="text" id="vendor" name="vendor">
     </div>
     
+
     <div class="form-row">
         <label for="notes">Notes</label>
         <textarea id="notes" name="notes" rows="3"></textarea>

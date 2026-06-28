@@ -1,8 +1,8 @@
 # routes/assets.py
 #
 # Asset management routes: list, create, edit, delete, and CSV import.
-# Assets belong to locations and can have work orders raised against them.
-# Each asset has a category, type, status, and optional manufacturer/vendor details.
+# Assets belong to locations and can optionally have a parent asset
+# to form a hierarchy (e.g. Vehicle → Solar Charging → Solar Charger).
 
 import csv
 import logging
@@ -30,9 +30,9 @@ async def list_assets(
     category: Optional[str] = Query(None),
     asset_status: Optional[str] = Query(None),
     manufacturer: Optional[str] = Query(None),
+    parent: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    # Map URL sort parameter to actual database column names
     sortable_columns = {
         "asset_name": "asset_name",
         "location": "location_name",
@@ -43,13 +43,12 @@ async def list_assets(
         "model": "model",
         "purchased": "purchase_date",
         "warranty": "warranty_end_date",
+        "parent": "parent_asset_name",
     }
 
-    # Default to asset_name if an invalid sort column is requested
     sort_col = sortable_columns.get(sort, "asset_name")
     dir_sql = "DESC" if direction.lower() == "desc" else "ASC"
 
-    # Build dynamic WHERE clause from active filters
     query = "SELECT * FROM v_assets WHERE 1=1"
     params = []
 
@@ -65,32 +64,35 @@ async def list_assets(
     if manufacturer:
         query += " AND manufacturer = ?"
         params.append(manufacturer)
+    if parent:
+        query += " AND parent_asset_name = ?"
+        params.append(parent)
 
     query += f" ORDER BY {sort_col} {dir_sql}, asset_name ASC"
     assets = dicts(db.execute(query, params))
 
-    # Fetch distinct values for filter dropdowns (from all assets, not just filtered ones)
+    # Distinct values for filter dropdowns
     locations_list = sorted({r["location_name"] for r in db.execute("SELECT DISTINCT location_name FROM v_assets")})
     categories_list = sorted({r["category"] for r in db.execute("SELECT DISTINCT category FROM v_assets WHERE category IS NOT NULL")})
     statuses_list = sorted({r["status"] for r in db.execute("SELECT DISTINCT status FROM v_assets WHERE status IS NOT NULL")})
     manufacturers_list = sorted({r["manufacturer"] for r in db.execute("SELECT DISTINCT manufacturer FROM v_assets WHERE manufacturer IS NOT NULL")})
+    parents_list = sorted({r["parent_asset_name"] for r in db.execute("SELECT DISTINCT parent_asset_name FROM v_assets WHERE parent_asset_name IS NOT NULL")})
 
     return templates.TemplateResponse(
         "assets.html",
         {
             "request": request,
             "assets": assets,
-            # Dropdown options for filter bar
             "locations_list": locations_list,
             "categories_list": categories_list,
             "statuses_list": statuses_list,
             "manufacturers_list": manufacturers_list,
-            # f_ prefix = current filter selection, passed back to maintain state after submit
+            "parents_list": parents_list,
             "f_location": location or "",
             "f_category": category or "",
             "f_status": asset_status or "",
             "f_manufacturer": manufacturer or "",
-            # Current sort state for column header links
+            "f_parent": parent or "",
             "sort": sort,
             "direction": direction,
         },
@@ -101,21 +103,22 @@ async def list_assets(
 
 @router.get("/assets/new")
 async def new_asset_form(request: Request, db: sqlite3.Connection = Depends(get_db)):
-    # Only show active locations in the dropdown
     locations = dicts(
         db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name")
     )
-    # Auto-suggest existing categories and types (datalist dropdowns)
     categories = sorted(
         {row["category"] for row in db.execute("SELECT DISTINCT category FROM assets WHERE category IS NOT NULL")}
     )
     types = sorted(
         {row["type"] for row in db.execute("SELECT DISTINCT type FROM assets WHERE type IS NOT NULL")}
     )
+    # All assets as potential parents
+    parent_assets = dicts(db.execute("SELECT id, name FROM assets ORDER BY name"))
 
     return templates.TemplateResponse(
         "asset_form.html",
-        {"request": request, "locations": locations, "categories": categories, "types": types},
+        {"request": request, "locations": locations, "categories": categories,
+         "types": types, "parent_assets": parent_assets},
     )
 
 
@@ -136,21 +139,26 @@ async def create_asset(
     warranty_end_date: Optional[str] = Form(None),
     cost: Optional[str] = Form(None),
     vendor: Optional[str] = Form(None),
+    parent_asset_id: Optional[int] = Form(None),
     notes: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
+    parent_val = parent_asset_id if parent_asset_id not in (None, 0) else None
+
     db.execute(
         """
         INSERT INTO assets
           (name, location_id, category, type, status, manufacturer, model,
-           serial_number, purchase_date, warranty_end_date, cost, vendor, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           serial_number, purchase_date, warranty_end_date, cost, vendor,
+           parent_asset_id, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             name.strip(), location_id, category or None, asset_type or None,
             asset_status or "Running", manufacturer or None, model or None,
             serial_number or None, purchase_date or None, warranty_end_date or None,
-            float(cost) if cost else None, vendor or None, notes or None,
+            float(cost) if cost else None, vendor or None,
+            parent_val, notes or None,
         ),
     )
     db.commit()
@@ -178,10 +186,23 @@ async def edit_asset_form(
     types = sorted(
         {row["type"] for row in db.execute("SELECT DISTINCT type FROM assets WHERE type IS NOT NULL")}
     )
+    # Exclude self from parent dropdown to prevent circular reference
+    parent_assets = dicts(db.execute(
+        "SELECT id, name FROM assets WHERE id != ? ORDER BY name",
+        (asset_id,),
+    ))
+
+    # Get child assets for display
+    child_assets = dicts(db.execute(
+        "SELECT id, name, status FROM assets WHERE parent_asset_id = ? ORDER BY name",
+        (asset_id,),
+    ))
 
     return templates.TemplateResponse(
         "asset_edit.html",
-        {"request": request, "asset": asset, "locations": locations, "categories": categories, "types": types},
+        {"request": request, "asset": asset, "locations": locations,
+         "categories": categories, "types": types,
+         "parent_assets": parent_assets, "child_assets": child_assets},
     )
 
 
@@ -203,6 +224,7 @@ async def update_asset(
     warranty_end_date: Optional[str] = Form(None),
     cost: Optional[str] = Form(None),
     vendor: Optional[str] = Form(None),
+    parent_asset_id: Optional[int] = Form(None),
     notes: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
@@ -210,19 +232,27 @@ async def update_asset(
     if not cur.fetchone():
         raise HTTPException(status_code=404, detail="Asset not found")
 
+    parent_val = parent_asset_id if parent_asset_id not in (None, 0) else None
+
+    # Prevent an asset from being its own parent
+    if parent_val == asset_id:
+        parent_val = None
+
     db.execute(
         """
         UPDATE assets
         SET name = ?, location_id = ?, category = ?, type = ?, status = ?,
             manufacturer = ?, model = ?, serial_number = ?,
-            purchase_date = ?, warranty_end_date = ?, cost = ?, vendor = ?, notes = ?
+            purchase_date = ?, warranty_end_date = ?, cost = ?, vendor = ?,
+            parent_asset_id = ?, notes = ?
         WHERE id = ?
         """,
         (
             name.strip(), location_id, category or None, asset_type or None,
             asset_status or "Running", manufacturer or None, model or None,
             serial_number or None, purchase_date or None, warranty_end_date or None,
-            float(cost) if cost else None, vendor or None, notes or None,
+            float(cost) if cost else None, vendor or None,
+            parent_val, notes or None,
             asset_id,
         ),
     )
@@ -233,7 +263,7 @@ async def update_asset(
 
 
 # --- Show delete confirmation page ------------------------------------------
-# Assets are hard-deleted. Blocked if there are open work orders linked.
+# Blocked if there are open work orders or child assets linked.
 
 @router.get("/assets/{asset_id}/delete")
 async def delete_asset_confirm(
@@ -248,9 +278,13 @@ async def delete_asset_confirm(
 
     asset = dict(row)
 
-    # Check for linked work orders to warn the user
     wo_count = db.execute(
         "SELECT COUNT(*) as count FROM work_orders WHERE asset_id = ?", (asset_id,)
+    ).fetchone()["count"]
+
+    # Check for child assets
+    child_count = db.execute(
+        "SELECT COUNT(*) as count FROM assets WHERE parent_asset_id = ?", (asset_id,)
     ).fetchone()["count"]
 
     details = []
@@ -258,6 +292,8 @@ async def delete_asset_confirm(
     if wo_count:
         details.append(f"{wo_count} work order(s) reference this asset")
         warning = "Linked work orders will keep their data but lose the asset reference."
+    if child_count:
+        details.append(f"{child_count} sub-asset(s) will become top-level assets")
 
     return templates.TemplateResponse(
         "confirm_delete.html",
@@ -286,7 +322,6 @@ async def delete_asset(
     if not row:
         raise HTTPException(status_code=404, detail="Asset not found")
 
-    # Block deletion if there are active work orders against this asset
     open_wo_count = db.execute(
         "SELECT COUNT(*) as count FROM work_orders WHERE asset_id = ? AND status NOT IN ('Done', 'Cancelled')",
         (asset_id,),
@@ -303,9 +338,12 @@ async def delete_asset(
                 "warning": None,
                 "details": None,
                 "cancel_url": "/assets",
+                "blocked": True,
             },
         )
 
+    # Unlink child assets (they become top-level) before deleting
+    db.execute("UPDATE assets SET parent_asset_id = NULL WHERE parent_asset_id = ?", (asset_id,))
     db.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
     db.commit()
 
@@ -321,11 +359,6 @@ async def import_assets_form(request: Request):
 
 
 # --- CSV import: process uploaded file ---------------------------------------
-# Expected columns: ASSET (required), LOCATION (required),
-# CATEGORY, TYPE, MANUFACTURER, MODEL, SERIAL #, DATE PURCHASED, WARRANTY ENDS, NOTES
-# Locations are auto-created if they don't exist.
-# Duplicate assets (same name + location) are skipped.
-# All activity is logged to asset_import.log.
 
 @router.post("/assets/import")
 async def import_assets_csv(
@@ -342,16 +375,12 @@ async def import_assets_csv(
         )
 
     reader = csv.DictReader(text_lines)
-
-    # Build a case-insensitive mapping from CSV headers to actual column names
     headers = [h.upper() for h in (reader.fieldnames or [])]
     header_map = {h.upper(): h for h in (reader.fieldnames or [])}
 
     def get_col(name: str):
-        """Look up the original CSV header for a logical column name (case-insensitive)."""
         return header_map.get(name.upper())
 
-    # Validate required columns exist
     required = {"ASSET", "LOCATION"}
     missing = {col for col in required if col not in headers}
     if missing:
@@ -360,7 +389,6 @@ async def import_assets_csv(
             {"request": request, "error": f"Missing required column(s): {', '.join(sorted(missing))}"},
         )
 
-    # Map logical column names to actual CSV headers
     col_asset = get_col("ASSET")
     col_location = get_col("LOCATION")
     col_category = get_col("CATEGORY")
@@ -378,7 +406,7 @@ async def import_assets_csv(
     with ASSET_IMPORT_LOG.open("a", encoding="utf-8") as log:
         log.write(f"\n--- Import from {file.filename} ---\n")
 
-        for i, row in enumerate(reader, start=2):  # start=2 because row 1 is the header
+        for i, row in enumerate(reader, start=2):
             name = (row.get(col_asset) or "").strip()
             loc_name = (row.get(col_location) or "").strip()
 
@@ -387,7 +415,6 @@ async def import_assets_csv(
                 skipped += 1
                 continue
 
-            # Find location by name, or auto-create it if it doesn't exist
             cur = db.execute("SELECT id FROM locations WHERE name = ?", (loc_name,))
             loc = cur.fetchone()
             if not loc:
@@ -398,7 +425,6 @@ async def import_assets_csv(
 
             location_id = loc["id"]
 
-            # Skip if this asset already exists at this location
             cur = db.execute(
                 "SELECT id FROM assets WHERE name = ? AND location_id = ?",
                 (name, location_id),
@@ -409,7 +435,6 @@ async def import_assets_csv(
                 skipped += 1
                 continue
 
-            # Extract optional columns (None if column doesn't exist in CSV)
             category = (row.get(col_category) or None) if col_category else None
             asset_type = (row.get(col_type) or None) if col_type else None
             manufacturer = (row.get(col_manufacturer) or None) if col_manufacturer else None

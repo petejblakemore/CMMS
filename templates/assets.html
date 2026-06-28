@@ -30,6 +30,14 @@
     {% endfor %}
   </select>
 
+   <select name="parent">
+    <option value="">All parents</option>
+    {% for pa in parents_list %}
+      <option value="{{ pa }}" {% if f_parent == pa %}selected{% endif %}>{{ pa }}</option>
+    {% endfor %}
+  </select>
+ 
+
   <select name="manufacturer">
     <option value="">All manufacturers</option>
     {% for m in manufacturers_list %}
@@ -45,6 +53,7 @@
   <thead>
     <tr>
       <th><a href="?sort=asset_name&direction={{ 'asc' if sort != 'asset_name' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Asset</a></th>
+      <th><a href="?sort=parent&direction={{ 'asc' if sort != 'parent' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}&parent={{ f_parent }}">Parent</a></th>
       <th><a href="?sort=location&direction={{ 'asc' if sort != 'location' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Location</a></th>
       <th><a href="?sort=category&direction={{ 'asc' if sort != 'category' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Category</a></th>
       <th><a href="?sort=type&direction={{ 'asc' if sort != 'type' or direction == 'desc' else 'desc' }}&location={{ f_location }}&category={{ f_category }}&asset_status={{ f_status }}&manufacturer={{ f_manufacturer }}">Type</a></th>
@@ -62,6 +71,11 @@
     {% for a in assets %}
       <tr>
         <td><a href="/assets/{{ a.asset_id }}/edit">{{ a.asset_name }}</a></td>
+        <td>
+          {% if a.parent_asset_id %}
+            <a href="/assets/{{ a.parent_asset_id }}/edit">{{ a.parent_asset_name }}</a>
+          {% endif %}
+        </td>      
         <td>{{ a.location_name }}</td>
         <td>{{ a.category or "" }}</td>
         <td>{{ a.type or "" }}</td>
@@ -76,7 +90,6 @@
             {{ a.status or "" }}
           {% endif %}
         </td>
-
         <td>{{ a.manufacturer or "" }}</td>
         <td>{{ a.model or "" }}</td>
         <td>{{ a.serial_number or "" }}</td>

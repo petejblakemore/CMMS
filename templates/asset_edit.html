@@ -83,6 +83,16 @@
     <input type="text" id="vendor" name="vendor" value="{{ asset.vendor or '' }}">
   </div>
 
+   <div class="form-row">
+    <label for="parent_asset_id">Parent asset</label>
+    <select id="parent_asset_id" name="parent_asset_id">
+      <option value="0">(none — top level)</option>
+      {% for pa in parent_assets %}
+        <option value="{{ pa.id }}" {% if asset.parent_asset_id == pa.id %}selected{% endif %}>{{ pa.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+ 
   <div class="form-row">
     <label for="notes">Notes</label>
     <textarea id="notes" name="notes" rows="3">{{ asset.notes or '' }}</textarea>
@@ -94,4 +104,32 @@
   </div>
 
 </form>
+
+{% if child_assets %}
+<h3 style="margin-top: 2rem;">Sub-assets</h3>
+<table>
+  <thead>
+    <tr><th>Name</th><th>Status</th></tr>
+  </thead>
+  <tbody>
+    {% for child in child_assets %}
+    <tr>
+      <td><a href="/assets/{{ child.id }}/edit">{{ child.name }}</a></td>
+      <td>
+        {% if child.status == "Running" %}
+          <span class="badge running">Running</span>
+        {% elif child.status == "Needs Maintenance" %}
+          <span class="badge needs-maintenance">Needs Maintenance</span>
+        {% elif child.status == "Out of Service" %}
+          <span class="badge out-of-service">Out of Service</span>
+        {% else %}
+          {{ child.status or "" }}
+        {% endif %}
+      </td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+
 {% endblock %}
