@@ -286,6 +286,7 @@ async def create_work_order(
     priority: str = Form("Normal"),
     due_date: Optional[str] = Form(None),
     source: Optional[str] = Form("Manual"),
+       estimated_hours: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
     asset_val = asset_id if asset_id not in (None, 0) else None
@@ -299,11 +300,13 @@ async def create_work_order(
     db.execute(
         """
         INSERT INTO work_orders
-          (asset_id, location_id, title, description, status, priority, source, due_date)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          (asset_id, location_id, title, description, status, priority, source, due_date, estimated_hours)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (asset_val, loc_val, title.strip(), description or None, initial_status, priority, source, due_date or None),
+        (asset_val, loc_val, title.strip(), description or None, initial_status, priority, source, due_date or None,
+         float(estimated_hours) if estimated_hours else None),
     )
+
     db.commit()
     return RedirectResponse(url="/work_orders", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -396,6 +399,7 @@ async def update_work_order_core(
     due_date: Optional[str] = Form(None),
     source: Optional[str] = Form(None),
     closed_notes: Optional[str] = Form(None),
+    estimated_hours: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
     asset_val = asset_id if asset_id not in (None, 0) else None
@@ -414,22 +418,24 @@ async def update_work_order_core(
         raise HTTPException(status_code=400, detail=f"Invalid priority: {priority}")
 
     db.execute(
-        """
-        UPDATE work_orders
-        SET asset_id = ?, location_id = ?, title = ?, description = ?,
-            status = ?, priority = ?, due_date = ?, source = ?, closed_notes = ?,
-            completed_at = CASE
-              WHEN ? = 'Done' AND completed_at IS NULL THEN datetime('now')
-              ELSE completed_at
-            END
-        WHERE id = ?
-        """,
-        (
-            asset_val, loc_val, title.strip(), description or None,
-            status_value, priority, due_date or None, source or None,
-            closed_notes or None, status_value, wo_id,
-        ),
-    )
+            """
+            UPDATE work_orders
+            SET asset_id = ?, location_id = ?, title = ?, description = ?,
+                status = ?, priority = ?, due_date = ?, source = ?, closed_notes = ?,
+                estimated_hours = ?,
+                completed_at = CASE
+                WHEN ? = 'Done' AND completed_at IS NULL THEN datetime('now')
+                ELSE completed_at
+                END
+            WHERE id = ?
+            """,
+            (
+                asset_val, loc_val, title.strip(), description or None,
+                status_value, priority, due_date or None, source or None,
+                closed_notes or None, float(estimated_hours) if estimated_hours else None,
+                status_value, wo_id,
+            ),
+        )
 
     if status_value != old_status:
         db.execute(
