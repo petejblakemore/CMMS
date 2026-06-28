@@ -60,7 +60,37 @@ def build_location_tree(locations):
 
     roots.sort(key=lambda r: r["name"])
     return roots
-# SQL fragment for ordering by priority (used by dashboard and work order lists)
+
+
+def get_hierarchical_locations(db, active_only=True):
+    """
+    Return locations as a flat list sorted by hierarchy,
+    with display_name showing the full path (e.g. 'Plas Gwernoer → Kitchen').
+    Used for dropdown menus throughout the app.
+    """
+    where = "WHERE active = 1" if active_only else ""
+    locations = dicts(db.execute(f"SELECT id, name, parent_id FROM locations {where} ORDER BY name"))
+
+    by_id = {loc["id"]: loc for loc in locations}
+
+    def get_path(loc):
+        parts = [loc["name"]]
+        current = loc
+        while current.get("parent_id") and current["parent_id"] in by_id:
+            current = by_id[current["parent_id"]]
+            parts.insert(0, current["name"])
+        return " → ".join(parts)
+
+    result = []
+    for loc in locations:
+        loc["display_name"] = get_path(loc)
+        result.append(loc)
+
+    result.sort(key=lambda x: x["display_name"])
+    return result
+
+
+# SQL fragment for ordering by priority
 PRIORITY_ORDER_SQL = """
     CASE priority
         WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2
@@ -83,4 +113,3 @@ def build_where_clause(filters: dict) -> tuple:
             params.append(val)
     sql = (" AND " + " AND ".join(clauses)) if clauses else ""
     return sql, params
-

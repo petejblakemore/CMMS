@@ -31,7 +31,7 @@
     <select id="location_id" name="location_id">
       <option value="0">(none)</option>
       {% for l in locations %}
-        <option value="{{ l.id }}" {% if wo.location_id and wo.location_id == l.id %}selected{% endif %}>{{ l.name }}</option>
+        <option value="{{ l.id }}" {% if wo.location_id and wo.location_id == l.id %}selected{% endif %}>{{ l.display_name }}</option>
       {% endfor %}
     </select>
   </div>

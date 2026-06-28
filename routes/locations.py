@@ -1,8 +1,7 @@
 # routes/locations.py
 #
-# Location management routes: list, create, edit, delete, and CSV import.
-# Locations are hierarchical and can have work orders raised against them.
-# Each asset has a category, type, status, and optional manufacturer/vendor details.
+# Location management routes: list, create, edit, soft delete.
+# Locations form a hierarchy with parent-child relationships.
 
 import sqlite3
 from typing import Optional
@@ -10,7 +9,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 
-from db import build_location_tree, dicts, get_db, templates
+from db import build_location_tree, dicts, get_db, get_hierarchical_locations, templates
 
 router = APIRouter()
 
@@ -20,7 +19,6 @@ async def list_locations(request: Request, db: sqlite3.Connection = Depends(get_
     locations_flat = dicts(db.execute("SELECT * FROM locations"))
     location_tree = build_location_tree(locations_flat)
 
-    # Count open work orders per location
     wo_counts = {
         r["location_id"]: r["wo_count"]
         for r in db.execute(
@@ -36,10 +34,9 @@ async def list_locations(request: Request, db: sqlite3.Connection = Depends(get_
     )
 
 
-
 @router.get("/locations/new")
 async def new_location_form(request: Request, db: sqlite3.Connection = Depends(get_db)):
-    parents = dicts(db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name"))
+    parents = get_hierarchical_locations(db)
     return templates.TemplateResponse(
         "location_form.html",
         {"request": request, "parents": parents},
@@ -77,13 +74,7 @@ async def edit_location_form(
         raise HTTPException(status_code=404, detail="Location not found")
 
     location = dict(row)
-
-    parents = dicts(
-        db.execute(
-            "SELECT id, name FROM locations WHERE active = 1 AND id != ? ORDER BY name",
-            (location_id,),
-        )
-    )
+    parents = [loc for loc in get_hierarchical_locations(db) if loc["id"] != location_id]
 
     return templates.TemplateResponse(
         "location_edit.html",
@@ -135,10 +126,6 @@ async def update_location(
 
     return RedirectResponse(url="/locations", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Add these routes to the bottom of routes/locations.py
-    # (before any final comments)
-
-    # --- Locations: delete (soft) ------------------------------------------------
 
 @router.get("/locations/{location_id}/delete")
 async def delete_location_confirm(
@@ -153,12 +140,10 @@ async def delete_location_confirm(
 
     location = dict(row)
 
-    # Count linked assets
     asset_count = db.execute(
         "SELECT COUNT(*) as count FROM assets WHERE location_id = ?", (location_id,)
     ).fetchone()["count"]
 
-    # Count linked work orders
     wo_count = db.execute(
         "SELECT COUNT(*) as count FROM work_orders WHERE location_id = ?", (location_id,)
     ).fetchone()["count"]
@@ -185,6 +170,7 @@ async def delete_location_confirm(
         },
     )
 
+
 @router.post("/locations/{location_id}/delete")
 async def delete_location(
     request: Request,
@@ -196,7 +182,6 @@ async def delete_location(
     if not row:
         raise HTTPException(status_code=404, detail="Location not found")
 
-    # Check for open work orders at this location
     open_wo_count = db.execute(
         "SELECT COUNT(*) as count FROM work_orders WHERE location_id = ? AND status NOT IN ('Done', 'Cancelled')",
         (location_id,),
@@ -212,6 +197,7 @@ async def delete_location(
                 "warning": None,
                 "details": None,
                 "cancel_url": "/locations",
+                "blocked": True,
             },
         )
 

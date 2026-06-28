@@ -1,8 +1,7 @@
 # routes/assets.py
 #
 # Asset management routes: list, create, edit, delete, and CSV import.
-# Assets belong to locations and can optionally have a parent asset
-# to form a hierarchy (e.g. Vehicle → Solar Charging → Solar Charger).
+# Assets belong to locations and can optionally have a parent asset.
 
 import csv
 import logging
@@ -13,13 +12,11 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, Reques
 from fastapi.responses import RedirectResponse
 
 from config import ASSET_IMPORT_LOG
-from db import dicts, get_db, templates
+from db import dicts, get_db, get_hierarchical_locations, templates
 
 logger = logging.getLogger("cmms")
 router = APIRouter()
 
-
-# --- List all assets with optional filtering and column sorting --------------
 
 @router.get("/assets")
 async def list_assets(
@@ -71,7 +68,6 @@ async def list_assets(
     query += f" ORDER BY {sort_col} {dir_sql}, asset_name ASC"
     assets = dicts(db.execute(query, params))
 
-    # Distinct values for filter dropdowns
     locations_list = sorted({r["location_name"] for r in db.execute("SELECT DISTINCT location_name FROM v_assets")})
     categories_list = sorted({r["category"] for r in db.execute("SELECT DISTINCT category FROM v_assets WHERE category IS NOT NULL")})
     statuses_list = sorted({r["status"] for r in db.execute("SELECT DISTINCT status FROM v_assets WHERE status IS NOT NULL")})
@@ -99,21 +95,16 @@ async def list_assets(
     )
 
 
-# --- Show the new asset form ------------------------------------------------
-
 @router.get("/assets/new")
 async def new_asset_form(request: Request, db: sqlite3.Connection = Depends(get_db)):
-    locations = dicts(
-        db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name")
-    )
+    locations = get_hierarchical_locations(db)
     categories = sorted(
         {row["category"] for row in db.execute("SELECT DISTINCT category FROM assets WHERE category IS NOT NULL")}
     )
     types = sorted(
         {row["type"] for row in db.execute("SELECT DISTINCT type FROM assets WHERE type IS NOT NULL")}
     )
-    # All assets as potential parents
-    parent_assets = dicts(db.execute("SELECT id, name FROM assets ORDER BY name"))
+    parent_assets = dicts(db.execute("SELECT id, name, location_id FROM assets ORDER BY name"))
 
     return templates.TemplateResponse(
         "asset_form.html",
@@ -121,8 +112,6 @@ async def new_asset_form(request: Request, db: sqlite3.Connection = Depends(get_
          "types": types, "parent_assets": parent_assets},
     )
 
-
-# --- Handle new asset form submission ---------------------------------------
 
 @router.post("/assets/new")
 async def create_asset(
@@ -167,8 +156,6 @@ async def create_asset(
     return RedirectResponse(url="/assets", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- Show the edit asset form (prefilled with current values) ----------------
-
 @router.get("/assets/{asset_id}/edit")
 async def edit_asset_form(
     request: Request, asset_id: int, db: sqlite3.Connection = Depends(get_db),
@@ -179,20 +166,17 @@ async def edit_asset_form(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     asset = dict(row)
-    locations = dicts(db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name"))
+    locations = get_hierarchical_locations(db)
     categories = sorted(
         {r["category"] for r in db.execute("SELECT DISTINCT category FROM assets WHERE category IS NOT NULL")}
     )
     types = sorted(
         {row["type"] for row in db.execute("SELECT DISTINCT type FROM assets WHERE type IS NOT NULL")}
     )
-    # Exclude self from parent dropdown to prevent circular reference
     parent_assets = dicts(db.execute(
         "SELECT id, name FROM assets WHERE id != ? ORDER BY name",
         (asset_id,),
     ))
-
-    # Get child assets for display
     child_assets = dicts(db.execute(
         "SELECT id, name, status FROM assets WHERE parent_asset_id = ? ORDER BY name",
         (asset_id,),
@@ -205,8 +189,6 @@ async def edit_asset_form(
          "parent_assets": parent_assets, "child_assets": child_assets},
     )
 
-
-# --- Handle edit asset form submission ---------------------------------------
 
 @router.post("/assets/{asset_id}/edit")
 async def update_asset(
@@ -233,8 +215,6 @@ async def update_asset(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     parent_val = parent_asset_id if parent_asset_id not in (None, 0) else None
-
-    # Prevent an asset from being its own parent
     if parent_val == asset_id:
         parent_val = None
 
@@ -262,14 +242,9 @@ async def update_asset(
     return RedirectResponse(url="/assets", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- Show delete confirmation page ------------------------------------------
-# Blocked if there are open work orders or child assets linked.
-
 @router.get("/assets/{asset_id}/delete")
 async def delete_asset_confirm(
-    request: Request,
-    asset_id: int,
-    db: sqlite3.Connection = Depends(get_db),
+    request: Request, asset_id: int, db: sqlite3.Connection = Depends(get_db),
 ):
     cur = db.execute("SELECT * FROM assets WHERE id = ?", (asset_id,))
     row = cur.fetchone()
@@ -277,12 +252,9 @@ async def delete_asset_confirm(
         raise HTTPException(status_code=404, detail="Asset not found")
 
     asset = dict(row)
-
     wo_count = db.execute(
         "SELECT COUNT(*) as count FROM work_orders WHERE asset_id = ?", (asset_id,)
     ).fetchone()["count"]
-
-    # Check for child assets
     child_count = db.execute(
         "SELECT COUNT(*) as count FROM assets WHERE parent_asset_id = ?", (asset_id,)
     ).fetchone()["count"]
@@ -308,14 +280,9 @@ async def delete_asset_confirm(
     )
 
 
-# --- Execute asset deletion --------------------------------------------------
-# Blocked if there are open (non-Done, non-Cancelled) work orders.
-
 @router.post("/assets/{asset_id}/delete")
 async def delete_asset(
-    request: Request,
-    asset_id: int,
-    db: sqlite3.Connection = Depends(get_db),
+    request: Request, asset_id: int, db: sqlite3.Connection = Depends(get_db),
 ):
     cur = db.execute("SELECT id, name FROM assets WHERE id = ?", (asset_id,))
     row = cur.fetchone()
@@ -335,14 +302,11 @@ async def delete_asset(
                 "request": request,
                 "heading": f"Cannot delete: {row['name']}",
                 "message": f"This asset has {open_wo_count} open work order(s). Close or reassign them first.",
-                "warning": None,
-                "details": None,
-                "cancel_url": "/assets",
-                "blocked": True,
+                "warning": None, "details": None,
+                "cancel_url": "/assets", "blocked": True,
             },
         )
 
-    # Unlink child assets (they become top-level) before deleting
     db.execute("UPDATE assets SET parent_asset_id = NULL WHERE parent_asset_id = ?", (asset_id,))
     db.execute("DELETE FROM assets WHERE id = ?", (asset_id,))
     db.commit()
@@ -351,28 +315,20 @@ async def delete_asset(
     return RedirectResponse(url="/assets", status_code=status.HTTP_303_SEE_OTHER)
 
 
-# --- CSV import: show upload form --------------------------------------------
-
 @router.get("/assets/import")
 async def import_assets_form(request: Request):
     return templates.TemplateResponse("asset_import.html", {"request": request})
 
 
-# --- CSV import: process uploaded file ---------------------------------------
-
 @router.post("/assets/import")
 async def import_assets_csv(
-    request: Request,
-    file: UploadFile = File(...),
-    db: sqlite3.Connection = Depends(get_db),
+    request: Request, file: UploadFile = File(...), db: sqlite3.Connection = Depends(get_db),
 ):
     raw = await file.read()
     text_lines = raw.decode("utf-8", errors="replace").splitlines()
 
     if not text_lines:
-        return templates.TemplateResponse(
-            "asset_import.html", {"request": request, "error": "Empty CSV file."},
-        )
+        return templates.TemplateResponse("asset_import.html", {"request": request, "error": "Empty CSV file."})
 
     reader = csv.DictReader(text_lines)
     headers = [h.upper() for h in (reader.fieldnames or [])]
@@ -425,13 +381,10 @@ async def import_assets_csv(
 
             location_id = loc["id"]
 
-            cur = db.execute(
-                "SELECT id FROM assets WHERE name = ? AND location_id = ?",
-                (name, location_id),
-            )
+            cur = db.execute("SELECT id FROM assets WHERE name = ? AND location_id = ?", (name, location_id))
             existing = cur.fetchone()
             if existing:
-                log.write(f"Line {i}: SKIP duplicate (asset '{name}' at '{loc_name}' already exists, id={existing['id']})\n")
+                log.write(f"Line {i}: SKIP duplicate (asset '{name}' at '{loc_name}' already exists)\n")
                 skipped += 1
                 continue
 
@@ -451,12 +404,8 @@ async def import_assets_csv(
                    serial_number, purchase_date, warranty_end_date, status, notes)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (
-                    name, location_id, category or None, asset_type or None,
-                    manufacturer or None, model or None, serial_number or None,
-                    purchase_date or None, warranty_end_date or None, "Running",
-                    notes or None,
-                ),
+                (name, location_id, category, asset_type, manufacturer, model,
+                 serial_number, purchase_date, warranty_end_date, "Running", notes),
             )
             imported += 1
             log.write(f"Line {i}: IMPORTED asset '{name}' at '{loc_name}'\n")

@@ -15,22 +15,22 @@
         <input type="text" id="name" name="name" required />
     </div>
 
-    <div class="form-row">
-        <label for="parent_asset_id">Parent asset</label>
-        <select id="parent_asset_id" name="parent_asset_id">
+  <div class="form-row">
+    <label for="parent_asset_id">Parent asset</label>
+    <select id="parent_asset_id" name="parent_asset_id" onchange="updateLocationFromParent(this)">
       <option value="0">(none — top level)</option>
       {% for pa in parent_assets %}
-        <option value="{{ pa.id }}">{{ pa.name }}</option>
+        <option value="{{ pa.id }}" data-location-id="{{ pa.location_id }}">{{ pa.name }}</option>
       {% endfor %}
     </select>
-    </div>
+  </div>
 
     <div class="form-row">
         <label for="location_id">Location *</label>
         <select id="location_id" name="location_id" required>
             <option value="">-- Select --</option>
             {% for loc in locations %}
-            <option value="{{ loc.id }}">{{ loc.name }}</option>
+            <option value="{{ loc.id }}">{{ loc.display_name }}</option>
             {% endfor %}
         </select>
     </div>
@@ -109,4 +109,15 @@
         <a class="btn secondary" href="/assets">Cancel</a>
     </div>
 </form>
+<script>
+function updateLocationFromParent(select) {
+  const selected = select.options[select.selectedIndex];
+  const locationId = selected.getAttribute('data-location-id');
+  if (locationId) {
+    document.getElementById('location_id').value = locationId;
+  }
+}
+</script>
+
+
 {% endblock %}

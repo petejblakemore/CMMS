@@ -14,7 +14,7 @@
     <label for="location_id">Location *</label>
     <select id="location_id" name="location_id" required>
       {% for loc in locations %}
-        <option value="{{ loc.id }}" {% if asset.location_id == loc.id %}selected{% endif %}>{{ loc.name }}</option>
+        <option value="{{ loc.id }}" {% if asset.location_id == loc.id %}selected{% endif %}>{{ loc.display_name }}</option>
       {% endfor %}
     </select>
   </div>
@@ -101,7 +101,9 @@
   <div class="form-actions">
     <button class="btn" type="submit">Save changes</button>
     <a class="btn secondary" href="/assets">Cancel</a>
+    <a class="btn" href="/assets/{{ asset.id }}/delete" style="background: #b91c1c; border-color: #b91c1c; margin-left: auto;">Delete</a>
   </div>
+
 
 </form>
 

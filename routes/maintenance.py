@@ -7,7 +7,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, status
 from fastapi.responses import RedirectResponse
 
-from db import dicts, get_db, templates
+from db import dicts, get_db, get_hierarchical_locations, templates, get_hierarchical_locations
+import db
 
 router = APIRouter()
 
@@ -84,9 +85,7 @@ async def new_maintenance_plan_form(request: Request, db: sqlite3.Connection = D
         "SELECT asset_id AS id, asset_name AS name, location_name "
         "FROM v_assets ORDER BY location_name, asset_name"
     ))
-    locations = dicts(db.execute(
-        "SELECT id, name FROM locations WHERE active = 1 ORDER BY name"
-    ))
+    locations = get_hierarchical_locations(db)
 
     return templates.TemplateResponse(
         "maintenance_plan_form.html",

@@ -34,7 +34,7 @@
     <select id="location_id" name="location_id">
       <option value="0">(none — use asset's location)</option>
       {% for l in locations %}
-        <option value="{{ l.id }}" {% if plan.location_id == l.id %}selected{% endif %}>{{ l.name }}</option>
+        <option value="{{ l.id }}" {% if plan.location_id == l.id %}selected{% endif %}></option>
       {% endfor %}
     </select>
   </div>

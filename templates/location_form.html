@@ -15,7 +15,7 @@
     <select id="parent_id" name="parent_id" style="width: 100%;">
         <option value="0">(none – top level)</option>
         {% for p in parents %}
-        <option value="{{ p.id }}">{{ p.name }}</option>
+        <option value="{{ p.id }}">{{ p.display_name }}</option>
             {% endfor %}
         </select>
     </div>

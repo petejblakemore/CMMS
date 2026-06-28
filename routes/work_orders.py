@@ -10,7 +10,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, sta
 from fastapi.responses import RedirectResponse
 
 from config import VALID_PRIORITIES, VALID_STATUSES
-from db import dicts, get_db, templates
+from db import dicts, get_db, get_hierarchical_locations, templates
 
 router = APIRouter()
 
@@ -267,7 +267,7 @@ async def new_work_order_form(request: Request, db: sqlite3.Connection = Depends
             "FROM v_assets ORDER BY location_name, asset_name"
         )
     )
-    locations = dicts(db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name"))
+    locations = get_hierarchical_locations(db)
 
     return templates.TemplateResponse(
         "work_order_form.html",
@@ -368,7 +368,7 @@ async def edit_work_order_form(
             "FROM v_assets ORDER BY location_name, asset_name"
         )
     )
-    locations = dicts(db.execute("SELECT id, name FROM locations WHERE active = 1 ORDER BY name"))
+    locations = get_hierarchical_locations(db)
 
     wo_history = dicts(
         db.execute(
