@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}New Project – Home CMMS{% endblock %}
+{% block content %}
+<h2>New Project</h2>
+
+{% if error %}
+  <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+<form method="post" style="max-width: 30rem;">
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="title" style="display: block; margin-bottom: 0.2rem;">Title *</label>
+    <input type="text" id="title" name="title" required style="width: 100%;" placeholder="e.g. Paint Front Door">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="description" style="display: block; margin-bottom: 0.2rem;">Description</label>
+    <textarea id="description" name="description" rows="3" style="width: 100%;"></textarea>
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="location_id" style="display: block; margin-bottom: 0.2rem;">Location</label>
+    <select id="location_id" name="location_id" style="width: 100%;">
+      <option value="0">(none)</option>
+      {% for loc in locations %}
+        <option value="{{ loc.id }}">{{ loc.display_name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="asset_id" style="display: block; margin-bottom: 0.2rem;">Asset</label>
+    <select id="asset_id" name="asset_id" style="width: 100%;">
+      <option value="0">(none)</option>
+      {% for a in assets %}
+        <option value="{{ a.id }}">{{ a.location_name }} – {{ a.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div style="margin-top: 1rem;">
+    <button class="btn" type="submit">Create project</button>
+    <a class="btn secondary" href="/projects">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}

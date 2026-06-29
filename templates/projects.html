@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}Projects – Home CMMS{% endblock %}
+{% block content %}
+<h2>Projects</h2>
+
+<p><a class="btn" href="/projects/new">New project</a></p>
+
+<form method="get" class="form-row" style="flex-wrap: wrap; margin-bottom: 0.5rem;">
+  <select name="project_status">
+    <option value="">All statuses</option>
+    {% for s in ["Planning", "Active", "On Hold", "Complete"] %}
+      <option value="{{ s }}" {% if f_status == s %}selected{% endif %}>{{ s }}</option>
+    {% endfor %}
+  </select>
+  <button class="btn" type="submit">Filter</button>
+  <a class="btn secondary" href="/projects">Clear</a>
+</form>
+
+{% if projects %}
+<table>
+  <thead>
+    <tr>
+      <th>Project</th>
+      <th>Status</th>
+      <th>Location</th>
+      <th>Asset</th>
+      <th>Progress</th>
+      <th>Tasks</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for p in projects %}
+    <tr>
+      <td><a href="/projects/{{ p.id }}">{{ p.title }}</a></td>
+      <td>
+        {% if p.status == "Active" %}
+          <span class="badge running">Active</span>
+        {% elif p.status == "Complete" %}
+          <span class="badge done">Complete</span>
+        {% elif p.status == "On Hold" %}
+          <span class="badge high">On Hold</span>
+        {% else %}
+          <span class="badge icebox">{{ p.status }}</span>
+        {% endif %}
+      </td>
+      <td>{{ p.location_name or "" }}</td>
+      <td>{{ p.asset_name or "" }}</td>
+      <td>
+        <div style="background: #e5e7eb; border-radius: 999px; height: 1.2rem; width: 100%; min-width: 80px; position: relative;">
+          <div style="background: {% if p.pct_complete == 100 %}#16a34a{% elif p.pct_complete > 50 %}#2563eb{% else %}#94a3b8{% endif %}; border-radius: 999px; height: 100%; width: {{ p.pct_complete }}%;"></div>
+          <span style="position: absolute; top: 0; left: 50%; transform: translateX(-50%); font-size: 0.7rem; font-weight: 600; line-height: 1.2rem;">{{ p.pct_complete }}%</span>
+        </div>
+      </td>
+      <td>{{ p.done_tasks }}/{{ p.total_tasks }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% else %}
+<p>No projects match the current filter.</p>
+{% endif %}
+{% endblock %}

@@ -75,6 +75,9 @@ from routes.assets import router as assets_router
 from routes.work_orders import router as work_orders_router
 from routes.users import router as users_router
 from routes.maintenance import router as maintenance_router
+from routes.projects import router as projects_router
+app.include_router(projects_router)
+
 
 
 
