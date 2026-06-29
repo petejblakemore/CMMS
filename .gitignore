@@ -21,3 +21,4 @@ cmms.log
 *.sqbpro
 __pycache__/
 startup.sh
+static/style.css
