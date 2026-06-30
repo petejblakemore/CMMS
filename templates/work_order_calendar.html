@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Calendar – Home CMMS{% endblock %}
+{% block content %}
+
+<div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem;">
+  <h2 style="margin: 0;">{{ month_name }} {{ year }}</h2>
+  <div style="display: flex; gap: 0.5rem;">
+    <a class="btn secondary" href="/work_orders/calendar?year={{ prev_year }}&month={{ prev_month }}">← Previous</a>
+    <a class="btn secondary" href="/work_orders/calendar">Today</a>
+    <a class="btn secondary" href="/work_orders/calendar?year={{ next_year }}&month={{ next_month }}">Next →</a>
+  </div>
+</div>
+
+<div class="calendar-grid">
+  <div class="calendar-header">Mon</div>
+  <div class="calendar-header">Tue</div>
+  <div class="calendar-header">Wed</div>
+  <div class="calendar-header">Thu</div>
+  <div class="calendar-header">Fri</div>
+  <div class="calendar-header calendar-weekend">Sat</div>
+  <div class="calendar-header calendar-weekend">Sun</div>
+
+  {% for week in weeks %}
+    {% for day in week %}
+      <div class="calendar-day {% if day.day == 0 %}calendar-empty{% endif %}{% if day.is_today %} calendar-today{% endif %}">
+        {% if day.day > 0 %}
+          <div class="calendar-day-num">{{ day.day }}</div>
+          {% for wo in day.wos %}
+            <a href="/work_orders/{{ wo.id }}/edit" class="calendar-wo calendar-wo-{{ wo.priority|lower }}" title="{{ wo.title }}{% if wo.asset_name %} · {{ wo.asset_name }}{% endif %}{% if wo.location_name %} · {{ wo.location_name }}{% endif %}">
+              {{ wo.title|truncate(20) }}
+            </a>
+          {% endfor %}
+        {% endif %}
+      </div>
+    {% endfor %}
+  {% endfor %}
+</div>
+
+<p style="margin-top: 0.75rem;">
+  <span class="calendar-wo calendar-wo-urgent" style="display: inline-block;">Urgent</span>
+  <span class="calendar-wo calendar-wo-high" style="display: inline-block;">High</span>
+  <span class="calendar-wo calendar-wo-normal" style="display: inline-block;">Normal</span>
+  <span class="calendar-wo calendar-wo-low" style="display: inline-block;">Low</span>
+</p>
+
+{% endblock %}

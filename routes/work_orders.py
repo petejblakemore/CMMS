@@ -124,6 +124,108 @@ async def work_order_history(
         },
     )
 
+# Add this route to routes/work_orders.py
+# Place it after the /work_orders/history route and before /work_orders/board
+
+# --- Calendar view -----------------------------------------------------------
+
+@router.get("/work_orders/calendar")
+async def work_order_calendar(
+    request: Request,
+    year: Optional[int] = Query(None),
+    month: Optional[int] = Query(None),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    from datetime import date, timedelta
+    import calendar
+
+    today = date.today()
+    cal_year = year or today.year
+    cal_month = month or today.month
+
+    # Get first and last day of the month
+    first_day = date(cal_year, cal_month, 1)
+    days_in_month = calendar.monthrange(cal_year, cal_month)[1]
+    last_day = date(cal_year, cal_month, days_in_month)
+
+    # Previous/next month for navigation
+    if cal_month == 1:
+        prev_year, prev_month = cal_year - 1, 12
+    else:
+        prev_year, prev_month = cal_year, cal_month - 1
+
+    if cal_month == 12:
+        next_year, next_month = cal_year + 1, 1
+    else:
+        next_year, next_month = cal_year, cal_month + 1
+
+    # Fetch work orders with due dates in this month
+    wos = dicts(db.execute(
+        """
+        SELECT w.id, w.title, w.due_date, w.status, w.priority,
+               a.name AS asset_name, l.name AS location_name
+        FROM work_orders w
+        LEFT JOIN assets a ON a.id = w.asset_id
+        LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id)
+        WHERE w.due_date >= ? AND w.due_date <= ?
+          AND w.status NOT IN ('Done', 'Cancelled')
+        ORDER BY w.due_date, CASE w.priority
+            WHEN 'Urgent' THEN 0 WHEN 'High' THEN 1
+            WHEN 'Normal' THEN 2 WHEN 'Low' THEN 3
+            ELSE 4
+        END
+        """,
+        (first_day.isoformat(), last_day.isoformat()),
+    ))
+
+    # Group WOs by date
+    wos_by_date = {}
+    for wo in wos:
+        d = wo["due_date"]
+        if d not in wos_by_date:
+            wos_by_date[d] = []
+        wos_by_date[d].append(wo)
+
+    # Build calendar grid (weeks of days)
+    # Start from Monday (0) to Sunday (6)
+    cal = calendar.Calendar(firstweekday=0)
+    weeks = cal.monthdayscalendar(cal_year, cal_month)
+
+    # Build day data for template
+    calendar_weeks = []
+    for week in weeks:
+        week_data = []
+        for day_num in week:
+            if day_num == 0:
+                week_data.append({"day": 0, "date_str": "", "wos": [], "is_today": False})
+            else:
+                d = date(cal_year, cal_month, day_num)
+                date_str = d.isoformat()
+                week_data.append({
+                    "day": day_num,
+                    "date_str": date_str,
+                    "wos": wos_by_date.get(date_str, []),
+                    "is_today": d == today,
+                })
+        calendar_weeks.append(week_data)
+
+    month_name = calendar.month_name[cal_month]
+
+    return templates.TemplateResponse(
+        "work_order_calendar.html",
+        {
+            "request": request,
+            "weeks": calendar_weeks,
+            "month_name": month_name,
+            "year": cal_year,
+            "month": cal_month,
+            "prev_year": prev_year,
+            "prev_month": prev_month,
+            "next_year": next_year,
+            "next_month": next_month,
+            "today": today.isoformat(),
+        },
+    )
 
 # --- Kanban board view -------------------------------------------------------
 
