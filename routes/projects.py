@@ -45,7 +45,6 @@ async def list_projects(
     query += " ORDER BY CASE p.status WHEN 'Active' THEN 0 WHEN 'Planning' THEN 1 WHEN 'On Hold' THEN 2 WHEN 'Complete' THEN 3 END, p.title"
     projects = dicts(db.execute(query, params))
 
-    # Calculate % complete for each project
     for p in projects:
         total = p["total_tasks"]
         done = p["done_tasks"]
@@ -100,9 +99,6 @@ async def create_project(
 
 # --- Project detail (view + manage tasks) ------------------------------------
 
-# Replace the project_detail function in routes/projects.py with this version
-# that calculates cost rollups
-
 @router.get("/projects/{project_id}")
 async def project_detail(
     request: Request,
@@ -131,7 +127,6 @@ async def project_detail(
     done_tasks = sum(1 for t in tasks if t["status"] == "Done")
     pct_complete = round((done_tasks / total_tasks * 100) if total_tasks > 0 else 0)
 
-    # Cost rollup from tasks
     cost_summary = {
         "est_hours": sum(t["estimated_hours"] or 0 for t in tasks),
         "est_labour": sum(t["estimated_labour_cost"] or 0 for t in tasks),
@@ -147,7 +142,6 @@ async def project_detail(
     cost_summary["var_material"] = cost_summary["act_material"] - cost_summary["est_material"]
     cost_summary["var_total"] = cost_summary["act_total"] - cost_summary["est_total"]
 
-    # Check if any tasks have costs (to decide whether to show the summary)
     has_costs = cost_summary["est_total"] > 0 or cost_summary["act_total"] > 0
 
     return templates.TemplateResponse(
@@ -212,7 +206,6 @@ async def update_project(
     if project_status not in VALID_PROJECT_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {project_status}")
 
-    # Block completion if tasks aren't all done
     if project_status == "Complete":
         incomplete = db.execute(
             "SELECT COUNT(*) as count FROM project_tasks WHERE project_id = ? AND status != 'Done'",
@@ -289,11 +282,61 @@ async def delete_project(
     if not cur.fetchone():
         raise HTTPException(status_code=404, detail="Project not found")
 
-    # Tasks deleted by ON DELETE CASCADE
     db.execute("DELETE FROM projects WHERE id = ?", (project_id,))
     db.commit()
 
     return RedirectResponse(url="/projects", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- Reopen project -----------------------------------------------------------
+
+@router.post("/projects/{project_id}/reopen")
+async def reopen_project(
+    request: Request,
+    project_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    cur = db.execute("SELECT id, status FROM projects WHERE id = ?", (project_id,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    db.execute(
+        "UPDATE projects SET status = 'Active' WHERE id = ?",
+        (project_id,),
+    )
+    db.commit()
+
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- Mark project complete ----------------------------------------------------
+
+@router.post("/projects/{project_id}/complete")
+async def complete_project(
+    request: Request,
+    project_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    cur = db.execute("SELECT id, status FROM projects WHERE id = ?", (project_id,))
+    row = cur.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    incomplete = db.execute(
+        "SELECT COUNT(*) as count FROM project_tasks WHERE project_id = ? AND status != 'Done'",
+        (project_id,),
+    ).fetchone()["count"]
+    if incomplete > 0:
+        return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    db.execute(
+        "UPDATE projects SET status = 'Complete' WHERE id = ?",
+        (project_id,),
+    )
+    db.commit()
+
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 # --- Add task to project ------------------------------------------------------
@@ -306,7 +349,6 @@ async def add_project_task(
     description: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    # Auto-set sort_order to next available
     max_order = db.execute(
         "SELECT COALESCE(MAX(sort_order), 0) as max_order FROM project_tasks WHERE project_id = ?",
         (project_id,),
@@ -321,7 +363,6 @@ async def add_project_task(
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-
 # --- Edit task ----------------------------------------------------------------
 
 @router.get("/projects/{project_id}/tasks/{task_id}/edit")
@@ -332,7 +373,6 @@ async def edit_task_form(
     cost_required: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
-
     cur = db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
     project = cur.fetchone()
     if not project:
@@ -348,7 +388,6 @@ async def edit_task_form(
         {"request": request, "project": dict(project), "task": dict(task),
          "error": "Actual costs are required before completing a task with estimated costs." if cost_required else None},
     )
-
 
 
 @router.post("/projects/{project_id}/tasks/{task_id}/edit")
@@ -390,7 +429,6 @@ async def update_task(
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-
 # --- Update task status -------------------------------------------------------
 
 @router.post("/projects/{project_id}/tasks/{task_id}/status")
@@ -404,7 +442,6 @@ async def update_task_status(
     if new_status not in VALID_TASK_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
 
-    # Close-gate: require actual costs if estimates exist
     if new_status == "Done":
         task = dict(db.execute(
             "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
@@ -434,8 +471,6 @@ async def update_task_status(
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
-
-
 # --- Delete task ---------------------------------------------------------------
 
 @router.post("/projects/{project_id}/tasks/{task_id}/delete")
@@ -451,7 +486,6 @@ async def delete_project_task(
     )
     db.commit()
 
-    # Renumber remaining tasks
     tasks = db.execute(
         "SELECT id FROM project_tasks WHERE project_id = ? ORDER BY sort_order",
         (project_id,),
@@ -478,12 +512,10 @@ async def move_project_task(
         (project_id,),
     ))
 
-    # Find the task's current position
     current_idx = next((i for i, t in enumerate(tasks) if t["id"] == task_id), None)
     if current_idx is None:
         return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Swap with neighbor
     if direction == "up" and current_idx > 0:
         swap_idx = current_idx - 1
     elif direction == "down" and current_idx < len(tasks) - 1:
@@ -491,7 +523,6 @@ async def move_project_task(
     else:
         return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
-    # Swap sort_order values
     db.execute("UPDATE project_tasks SET sort_order = ? WHERE id = ?", (tasks[swap_idx]["sort_order"], tasks[current_idx]["id"]))
     db.execute("UPDATE project_tasks SET sort_order = ? WHERE id = ?", (tasks[current_idx]["sort_order"], tasks[swap_idx]["id"]))
     db.commit()

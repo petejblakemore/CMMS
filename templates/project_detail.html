@@ -42,6 +42,22 @@
   </div>
 </div>
 
+{% if project.status == "Complete" %}
+<div class="card" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;">
+  <span style="font-weight: 600;">This project is complete and locked.</span>
+  <form method="post" action="/projects/{{ project.id }}/reopen">
+    <button class="btn" type="submit">Reopen Project</button>
+  </form>
+</div>
+{% elif project.status != "Planning" and total_tasks > 0 and done_tasks == total_tasks %}
+<div class="card" style="margin-bottom: 1rem; display: flex; align-items: center; gap: 1rem;">
+  <span style="font-weight: 600;">All tasks are done.</span>
+  <form method="post" action="/projects/{{ project.id }}/complete">
+    <button class="btn" type="submit" style="background: #16a34a; border-color: #16a34a;">Mark Complete</button>
+  </form>
+</div>
+{% endif %}
+
 <!-- Cost summary (only shown if any costs exist) -->
 {% if has_costs %}
 <div class="card" style="margin-bottom: 1rem;">
@@ -114,7 +130,11 @@
     <tr>
       <td>{{ task.sort_order }}</td>
       <td>
-        <a href="/projects/{{ project.id }}/tasks/{{ task.id }}/edit">{{ task.title }}</a>
+        {% if project.status != "Complete" %}
+          <a href="/projects/{{ project.id }}/tasks/{{ task.id }}/edit">{{ task.title }}</a>
+        {% else %}
+          {{ task.title }}
+        {% endif %}
         {% if task.description %}
           <div style="font-size: 0.8rem; color: #6b7280;">{{ task.description }}</div>
         {% endif %}
@@ -142,6 +162,7 @@
         {% endif %}
       </td>
       <td>
+        {% if project.status != "Complete" %}
         <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
           {% if task.status != "Done" %}
           <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/status" style="display: inline;">
@@ -171,6 +192,9 @@
             <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem; color: #b91c1c; border-color: #b91c1c;">✕</button>
           </form>
         </div>
+        {% else %}
+          <span style="color: #6b7280; font-size: 0.8rem;">Locked</span>
+        {% endif %}
       </td>
     </tr>
     {% endfor %}
@@ -180,7 +204,7 @@
 <p>No tasks yet. Add your first task below.</p>
 {% endif %}
 
-<!-- Add task form -->
+{% if project.status != "Complete" %}
 <div class="card" style="margin-top: 0.75rem;">
   <form method="post" action="/projects/{{ project.id }}/tasks/add">
     <div style="margin-bottom: 0.5rem;">
@@ -193,5 +217,6 @@
     <button class="btn" type="submit">Add task</button>
   </form>
 </div>
+{% endif %}
 
 {% endblock %}
