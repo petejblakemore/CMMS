@@ -1,7 +1,7 @@
 # routes/work_orders.py
 #
-# Work order management routes: list (grouped by status), create, edit,
-# delete, inline status updates, history, Kanban board, and JSON API.
+# Work order management: grouped list, create, edit, delete,
+# inline status updates, history, Kanban board, and costing.
 
 import sqlite3
 from typing import Optional
@@ -16,84 +16,43 @@ router = APIRouter()
 
 
 # --- List all work orders (grouped by status) --------------------------------
-#
-# ADDED: optional ?location= and ?asset= query parameters (fix for issue #30).
-# Dashboard "Open WOs by Location/Asset" links now pre-filter this view.
-# The same filter is applied to every status group (Open, In Progress, Queued,
-# Icebox, Done, Cancelled) so the whole page is scoped to the chosen entity.
-# filter_location / filter_asset are passed to the template so it can display
-# an active-filter banner with a "Clear filter" link.
 
 @router.get("/work_orders")
 async def list_work_orders(
     request: Request,
-    # ADDED: location and asset are optional query params — both default to None
-    # (no filter). Populated by dashboard links, the Assets "View" column, and
-    # the Locations "work orders" links.
-    location: Optional[str] = Query(None),
-    asset: Optional[str] = Query(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
-    priority_order = (
-        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 "
-        "WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
+    open_wos = dicts(db.execute(
+        "SELECT * FROM v_open_work_orders WHERE status = 'Open' ORDER BY "
+        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
         "due_date IS NULL, due_date"
-    )
+    ))
 
-    # ADDED: build a reusable SQL fragment and params list from whichever
-    # filters are active. Empty string = no filter = show all.
-    filter_sql = ""
-    filter_params: list = []
-    if location:
-        filter_sql += " AND location_name = ?"
-        filter_params.append(location)
-    if asset:
-        filter_sql += " AND asset_name = ?"
-        filter_params.append(asset)
+    in_progress_wos = dicts(db.execute(
+        "SELECT * FROM v_open_work_orders WHERE status = 'In Progress' ORDER BY "
+        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
+        "due_date IS NULL, due_date"
+    ))
 
-    # ADDED: inner helper so the same filter applies to every status bucket
-    # without duplicating the query four times.
-    def fetch(status: str):
-        return dicts(db.execute(
-            f"SELECT * FROM v_open_work_orders WHERE status = ?{filter_sql} ORDER BY {priority_order}",
-            [status] + filter_params,
-        ))
+    queued_wos = dicts(db.execute(
+        "SELECT * FROM v_open_work_orders WHERE status = 'Queued' ORDER BY "
+        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
+        "due_date IS NULL, due_date"
+    ))
 
-    open_wos       = fetch("Open")
-    in_progress_wos = fetch("In Progress")
-    queued_wos     = fetch("Queued")
-    icebox_wos     = fetch("Icebox")
+    icebox_wos = dicts(db.execute(
+        "SELECT * FROM v_open_work_orders WHERE status = 'Icebox' ORDER BY "
+        "CASE priority WHEN 'Urgent' THEN 3 WHEN 'High' THEN 2 WHEN 'Normal' THEN 1 WHEN 'Low' THEN 0 ELSE -1 END DESC, "
+        "due_date IS NULL, due_date"
+    ))
 
-    # ADDED: Done/Cancelled live in the base work_orders table (not the view),
-    # so when a filter is active we JOIN to assets/locations to apply it.
-    # When no filter is active we use the simpler original queries.
-    if filter_sql:
-        closed_wos = dicts(db.execute(
-            "SELECT w.* FROM work_orders w "
-            "LEFT JOIN assets a ON a.id = w.asset_id "
-            "LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id) "
-            f"WHERE w.status = 'Done'{'' if not location else ' AND l.name = ?'}"
-            f"{'' if not asset else ' AND a.name = ?'} "
-            "ORDER BY w.completed_at DESC LIMIT 50",
-            ([location] if location else []) + ([asset] if asset else []),
-        ))
-        cancelled_wos = dicts(db.execute(
-            "SELECT w.* FROM work_orders w "
-            "LEFT JOIN assets a ON a.id = w.asset_id "
-            "LEFT JOIN locations l ON l.id = COALESCE(w.location_id, a.location_id) "
-            f"WHERE w.status = 'Cancelled'{'' if not location else ' AND l.name = ?'}"
-            f"{'' if not asset else ' AND a.name = ?'} "
-            "ORDER BY w.created_at DESC LIMIT 50",
-            ([location] if location else []) + ([asset] if asset else []),
-        ))
-    else:
-        # Original unfiltered queries — unchanged from before
-        closed_wos = dicts(db.execute(
-            "SELECT * FROM work_orders WHERE status = 'Done' ORDER BY completed_at DESC LIMIT 50"
-        ))
-        cancelled_wos = dicts(db.execute(
-            "SELECT * FROM work_orders WHERE status = 'Cancelled' ORDER BY created_at DESC LIMIT 50"
-        ))
+    closed_wos = dicts(db.execute(
+        "SELECT * FROM work_orders WHERE status = 'Done' ORDER BY completed_at DESC LIMIT 50"
+    ))
+
+    cancelled_wos = dicts(db.execute(
+        "SELECT * FROM work_orders WHERE status = 'Cancelled' ORDER BY created_at DESC LIMIT 50"
+    ))
 
     return templates.TemplateResponse(
         "work_orders.html",
@@ -105,9 +64,6 @@ async def list_work_orders(
             "icebox_wos": icebox_wos,
             "closed_wos": closed_wos,
             "cancelled_wos": cancelled_wos,
-            # ADDED: pass active filter values so the template can show the banner
-            "filter_location": location or "",
-            "filter_asset": asset or "",
         },
     )
 
@@ -228,12 +184,29 @@ async def api_update_work_order_status(
     if new_status not in VALID_STATUSES:
         return JSONResponse({"error": f"Invalid status: {new_status}"}, status_code=400)
 
-    cur = db.execute("SELECT status FROM work_orders WHERE id = ?", (wo_id,))
+    cur = db.execute("SELECT * FROM work_orders WHERE id = ?", (wo_id,))
     row = cur.fetchone()
     if not row:
         return JSONResponse({"error": "Work order not found"}, status_code=404)
 
-    old_status = row["status"]
+    wo = dict(row)
+    old_status = wo["status"]
+
+    # Close-gate: block Done if estimates exist but actuals are missing
+    if new_status == "Done":
+        has_estimates = (
+            (wo.get("estimated_labour_cost") and wo["estimated_labour_cost"] > 0) or
+            (wo.get("estimated_material_cost") and wo["estimated_material_cost"] > 0)
+        )
+        missing_actuals = (
+            not wo.get("actual_labour_cost") or
+            not wo.get("actual_material_cost")
+        )
+        if has_estimates and missing_actuals:
+            return JSONResponse(
+                {"error": "Actual costs are required before completing this work order. Use the edit form to enter costs."},
+                status_code=400,
+            )
 
     db.execute(
         """
@@ -257,16 +230,19 @@ async def api_update_work_order_status(
     return JSONResponse({"ok": True, "old_status": old_status, "new_status": new_status})
 
 
+
 # --- Create new work order ---------------------------------------------------
 
 @router.get("/work_orders/new")
 async def new_work_order_form(request: Request, db: sqlite3.Connection = Depends(get_db)):
     assets = dicts(
         db.execute(
-            "SELECT asset_id AS id, asset_name AS name, location_name "
+            "SELECT asset_id AS id, asset_name AS name, location_name, location_id "
             "FROM v_assets ORDER BY location_name, asset_name"
         )
     )
+
+
     locations = get_hierarchical_locations(db)
 
     return templates.TemplateResponse(
@@ -286,7 +262,9 @@ async def create_work_order(
     priority: str = Form("Normal"),
     due_date: Optional[str] = Form(None),
     source: Optional[str] = Form("Manual"),
-       estimated_hours: Optional[str] = Form(None),
+    estimated_hours: Optional[str] = Form(None),
+    estimated_labour_cost: Optional[str] = Form(None),
+    estimated_material_cost: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
     asset_val = asset_id if asset_id not in (None, 0) else None
@@ -300,13 +278,18 @@ async def create_work_order(
     db.execute(
         """
         INSERT INTO work_orders
-          (asset_id, location_id, title, description, status, priority, source, due_date, estimated_hours)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          (asset_id, location_id, title, description, status, priority, source,
+           due_date, estimated_hours, estimated_labour_cost, estimated_material_cost)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
-        (asset_val, loc_val, title.strip(), description or None, initial_status, priority, source, due_date or None,
-         float(estimated_hours) if estimated_hours else None),
+        (
+            asset_val, loc_val, title.strip(), description or None,
+            initial_status, priority, source, due_date or None,
+            float(estimated_hours) if estimated_hours else None,
+            float(estimated_labour_cost) if estimated_labour_cost else None,
+            float(estimated_material_cost) if estimated_material_cost else None,
+        ),
     )
-
     db.commit()
     return RedirectResponse(url="/work_orders", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -367,10 +350,11 @@ async def edit_work_order_form(
     wo = dict(row)
     assets = dicts(
         db.execute(
-            "SELECT asset_id AS id, asset_name AS name, location_name "
+            "SELECT asset_id AS id, asset_name AS name, location_name, location_id "
             "FROM v_assets ORDER BY location_name, asset_name"
         )
     )
+
     locations = get_hierarchical_locations(db)
 
     wo_history = dicts(
@@ -382,7 +366,8 @@ async def edit_work_order_form(
 
     return templates.TemplateResponse(
         "work_order_edit.html",
-        {"request": request, "wo": wo, "assets": assets, "locations": locations, "wo_history": wo_history},
+        {"request": request, "wo": wo, "assets": assets, "locations": locations,
+         "wo_history": wo_history, "error": None},
     )
 
 
@@ -400,6 +385,10 @@ async def update_work_order_core(
     source: Optional[str] = Form(None),
     closed_notes: Optional[str] = Form(None),
     estimated_hours: Optional[str] = Form(None),
+    estimated_labour_cost: Optional[str] = Form(None),
+    estimated_material_cost: Optional[str] = Form(None),
+    actual_labour_cost: Optional[str] = Form(None),
+    actual_material_cost: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
     asset_val = asset_id if asset_id not in (None, 0) else None
@@ -417,25 +406,59 @@ async def update_work_order_core(
     if priority not in VALID_PRIORITIES:
         raise HTTPException(status_code=400, detail=f"Invalid priority: {priority}")
 
-    db.execute(
-            """
-            UPDATE work_orders
-            SET asset_id = ?, location_id = ?, title = ?, description = ?,
-                status = ?, priority = ?, due_date = ?, source = ?, closed_notes = ?,
-                estimated_hours = ?,
-                completed_at = CASE
-                WHEN ? = 'Done' AND completed_at IS NULL THEN datetime('now')
-                ELSE completed_at
-                END
-            WHERE id = ?
-            """,
-            (
-                asset_val, loc_val, title.strip(), description or None,
-                status_value, priority, due_date or None, source or None,
-                closed_notes or None, float(estimated_hours) if estimated_hours else None,
-                status_value, wo_id,
-            ),
+    # Close-gate: require actual costs before completing a WO with estimates
+    if status_value == "Done":
+        has_estimates = (
+            (estimated_labour_cost and float(estimated_labour_cost) > 0) or
+            (estimated_material_cost and float(estimated_material_cost) > 0)
         )
+        missing_actuals = (
+            not actual_labour_cost or
+            not actual_material_cost
+        )
+        if has_estimates and missing_actuals:
+            wo = dict(db.execute("SELECT * FROM work_orders WHERE id = ?", (wo_id,)).fetchone())
+            assets_list = dicts(db.execute(
+                "SELECT asset_id AS id, asset_name AS name, location_name "
+                "FROM v_assets ORDER BY location_name, asset_name"
+            ))
+            locations_list = get_hierarchical_locations(db)
+            wo_history = dicts(db.execute(
+                "SELECT * FROM work_order_history WHERE work_order_id = ? ORDER BY event_time DESC",
+                (wo_id,),
+            ))
+            return templates.TemplateResponse(
+                "work_order_edit.html",
+                {"request": request, "wo": wo, "assets": assets_list,
+                 "locations": locations_list, "wo_history": wo_history,
+                 "error": "Actual costs are required before completing a work order with estimated costs."},
+            )
+
+    db.execute(
+        """
+        UPDATE work_orders
+        SET asset_id = ?, location_id = ?, title = ?, description = ?,
+            status = ?, priority = ?, due_date = ?, source = ?, closed_notes = ?,
+            estimated_hours = ?, estimated_labour_cost = ?, estimated_material_cost = ?,
+            actual_labour_cost = ?, actual_material_cost = ?,
+            completed_at = CASE
+              WHEN ? = 'Done' AND completed_at IS NULL THEN datetime('now')
+              ELSE completed_at
+            END
+        WHERE id = ?
+        """,
+        (
+            asset_val, loc_val, title.strip(), description or None,
+            status_value, priority, due_date or None, source or None,
+            closed_notes or None,
+            float(estimated_hours) if estimated_hours else None,
+            float(estimated_labour_cost) if estimated_labour_cost else None,
+            float(estimated_material_cost) if estimated_material_cost else None,
+            float(actual_labour_cost) if actual_labour_cost else None,
+            float(actual_material_cost) if actual_material_cost else None,
+            status_value, wo_id,
+        ),
+    )
 
     if status_value != old_status:
         db.execute(
@@ -462,7 +485,6 @@ async def delete_work_order_confirm(
 
     wo = dict(row)
 
-    # Block deletion of completed work orders
     if wo["status"] == "Done":
         return templates.TemplateResponse(
             "confirm_delete.html",
@@ -477,7 +499,6 @@ async def delete_work_order_confirm(
             },
         )
 
-    # Show confirmation with linked record counts
     history_count = db.execute(
         "SELECT COUNT(*) as count FROM work_order_history WHERE work_order_id = ?", (wo_id,)
     ).fetchone()["count"]
@@ -526,7 +547,6 @@ async def delete_work_order(
             },
         )
 
-    # History is deleted by ON DELETE CASCADE
     db.execute("DELETE FROM work_orders WHERE id = ?", (wo_id,))
     db.commit()
 

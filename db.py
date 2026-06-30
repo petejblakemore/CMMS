@@ -10,8 +10,12 @@ from fastapi.templating import Jinja2Templates
 
 from config import BASE_DIR, DB_PATH
 
+from config import BASE_DIR, DB_PATH, CURRENCY_SYMBOL
+
+
 
 templates = Jinja2Templates(directory=str(BASE_DIR / "templates"))
+templates.env.globals["currency"] = CURRENCY_SYMBOL
 
 
 def get_db():

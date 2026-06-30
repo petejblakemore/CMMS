@@ -84,15 +84,19 @@ async function handleDrop(event, newStatus) {
     });
 
     if (!response.ok) {
-      // Reload the page if the update failed
+      const data = await response.json();
+      alert(data.error || 'Failed to update status');
       window.location.reload();
+      return;
     }
   } catch (err) {
+    alert('Failed to update status');
     window.location.reload();
   }
 }
 
 function updateCounts() {
+
   document.querySelectorAll('.kanban-col').forEach(col => {
     const count = col.querySelectorAll('.kanban-card').length;
     col.querySelector('.kanban-count').textContent = count;

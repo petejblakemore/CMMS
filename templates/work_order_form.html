@@ -21,15 +21,14 @@
 
     <div class="form-row">
         <label for="asset_id">Asset</label>
-        <select id="asset_id" name="asset_id">
+        <select id="asset_id" name="asset_id" onchange="updateLocationFromAsset(this)">
             <option value="0">(none)</option>
             {% for a in assets %}
-            <option value="{{ a.id }}">
-                {{ a.location_name }} – {{ a.name }}
-            </option>
+                <option value="{{ a.id }}" data-location-id="{{ a.location_id }}">{{ a.location_name }} – {{ a.name }}</option>
             {% endfor %}
         </select>
-    </div>
+  </div>
+
 
     <div class="form-row">
         <label for="location_id">Location</label>
@@ -73,6 +72,16 @@
         <input type="number" id="estimated_hours" name="estimated_hours" step="0.25" min="0" placeholder="0.00">
     </div>
 
+    <div class="form-row">
+        <label for="estimated_labour_cost">Est. labour cost ({{ currency }})</label>
+        <input type="number" id="estimated_labour_cost" name="estimated_labour_cost" step="0.01" min="0" placeholder="0.00">
+    </div>
+
+  <div class="form-row">
+    <label for="estimated_material_cost">Est. material cost ({{ currency }})</label>
+    <input type="number" id="estimated_material_cost" name="estimated_material_cost" step="0.01" min="0" placeholder="0.00">
+  </div>
+
 
     <div class="form-row">
         <label for="source">Source</label>
@@ -84,4 +93,15 @@
         <a class="btn secondary" href="/work_orders">Cancel</a>
     </div>
 </form>
+
+<script>
+function updateLocationFromAsset(select) {
+  const selected = select.options[select.selectedIndex];
+  const locationId = selected.getAttribute('data-location-id');
+  if (locationId) {
+    document.getElementById('location_id').value = locationId;
+  }
+}
+</script>
+
 {% endblock %}

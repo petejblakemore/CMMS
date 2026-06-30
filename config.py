@@ -11,3 +11,4 @@ ASSET_IMPORT_LOG = BASE_DIR / "asset_import.log"
 VALID_STATUSES = {"Open", "In Progress", "Queued", "Done", "Cancelled", "Icebox"}
 VALID_PRIORITIES = {"Low", "Normal", "High", "Urgent"}
 VALID_ASSET_STATUSES = {"Running", "Needs Maintenance", "Out of Service"}
+CURRENCY_SYMBOL = "£"  # Change to "$" or "€" as needed
