@@ -1,0 +1,63 @@
+{% extends "base.html" %}
+{% block title %}Edit Task – Home CMMS{% endblock %}
+{% block content %}
+<h2>Edit Task: {{ task.title }}</h2>
+<p style="color: #6b7280; font-size: 0.9rem;">Project: <a href="/projects/{{ project.id }}">{{ project.title }}</a></p>
+
+{% if error %}
+  <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
+{% endif %}
+
+<form method="post" style="max-width: 30rem;">
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="title" style="display: block; margin-bottom: 0.2rem;">Title *</label>
+    <input type="text" id="title" name="title" value="{{ task.title }}" required style="width: 100%;">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="description" style="display: block; margin-bottom: 0.2rem;">Description</label>
+    <textarea id="description" name="description" rows="3" style="width: 100%;">{{ task.description or '' }}</textarea>
+  </div>
+
+  <h3 style="margin-top: 1rem; margin-bottom: 0.5rem;">Estimated</h3>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="estimated_hours" style="display: block; margin-bottom: 0.2rem;">Hours</label>
+    <input type="number" id="estimated_hours" name="estimated_hours" step="0.25" min="0" value="{{ task.estimated_hours or '' }}" style="width: 100%; max-width: 8rem;">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="estimated_labour_cost" style="display: block; margin-bottom: 0.2rem;">Labour cost ({{ currency }})</label>
+    <input type="number" id="estimated_labour_cost" name="estimated_labour_cost" step="0.01" min="0" value="{{ task.estimated_labour_cost or '' }}" style="width: 100%; max-width: 8rem;">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="estimated_material_cost" style="display: block; margin-bottom: 0.2rem;">Material cost ({{ currency }})</label>
+    <input type="number" id="estimated_material_cost" name="estimated_material_cost" step="0.01" min="0" value="{{ task.estimated_material_cost or '' }}" style="width: 100%; max-width: 8rem;">
+  </div>
+
+  <h3 style="margin-top: 1rem; margin-bottom: 0.5rem;">Actual</h3>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="actual_hours" style="display: block; margin-bottom: 0.2rem;">Hours</label>
+    <input type="number" id="actual_hours" name="actual_hours" step="0.25" min="0" value="{{ task.actual_hours or '' }}" style="width: 100%; max-width: 8rem;">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="actual_labour_cost" style="display: block; margin-bottom: 0.2rem;">Labour cost ({{ currency }})</label>
+    <input type="number" id="actual_labour_cost" name="actual_labour_cost" step="0.01" min="0" value="{{ task.actual_labour_cost or '' }}" style="width: 100%; max-width: 8rem;">
+  </div>
+
+  <div style="margin-bottom: 0.6rem;">
+    <label for="actual_material_cost" style="display: block; margin-bottom: 0.2rem;">Material cost ({{ currency }})</label>
+    <input type="number" id="actual_material_cost" name="actual_material_cost" step="0.01" min="0" value="{{ task.actual_material_cost or '' }}" style="width: 100%; max-width: 8rem;">
+  </div>
+
+  <div style="margin-top: 1rem;">
+    <button class="btn" type="submit">Save changes</button>
+    <a class="btn secondary" href="/projects/{{ project.id }}">Cancel</a>
+  </div>
+
+</form>
+{% endblock %}

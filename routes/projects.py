@@ -100,6 +100,9 @@ async def create_project(
 
 # --- Project detail (view + manage tasks) ------------------------------------
 
+# Replace the project_detail function in routes/projects.py with this version
+# that calculates cost rollups
+
 @router.get("/projects/{project_id}")
 async def project_detail(
     request: Request,
@@ -128,6 +131,25 @@ async def project_detail(
     done_tasks = sum(1 for t in tasks if t["status"] == "Done")
     pct_complete = round((done_tasks / total_tasks * 100) if total_tasks > 0 else 0)
 
+    # Cost rollup from tasks
+    cost_summary = {
+        "est_hours": sum(t["estimated_hours"] or 0 for t in tasks),
+        "est_labour": sum(t["estimated_labour_cost"] or 0 for t in tasks),
+        "est_material": sum(t["estimated_material_cost"] or 0 for t in tasks),
+        "act_hours": sum(t["actual_hours"] or 0 for t in tasks),
+        "act_labour": sum(t["actual_labour_cost"] or 0 for t in tasks),
+        "act_material": sum(t["actual_material_cost"] or 0 for t in tasks),
+    }
+    cost_summary["est_total"] = cost_summary["est_labour"] + cost_summary["est_material"]
+    cost_summary["act_total"] = cost_summary["act_labour"] + cost_summary["act_material"]
+    cost_summary["var_hours"] = cost_summary["act_hours"] - cost_summary["est_hours"]
+    cost_summary["var_labour"] = cost_summary["act_labour"] - cost_summary["est_labour"]
+    cost_summary["var_material"] = cost_summary["act_material"] - cost_summary["est_material"]
+    cost_summary["var_total"] = cost_summary["act_total"] - cost_summary["est_total"]
+
+    # Check if any tasks have costs (to decide whether to show the summary)
+    has_costs = cost_summary["est_total"] > 0 or cost_summary["act_total"] > 0
+
     return templates.TemplateResponse(
         "project_detail.html",
         {
@@ -137,6 +159,8 @@ async def project_detail(
             "total_tasks": total_tasks,
             "done_tasks": done_tasks,
             "pct_complete": pct_complete,
+            "cost": cost_summary,
+            "has_costs": has_costs,
         },
     )
 
@@ -297,6 +321,76 @@ async def add_project_task(
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
+
+# --- Edit task ----------------------------------------------------------------
+
+@router.get("/projects/{project_id}/tasks/{task_id}/edit")
+async def edit_task_form(
+    request: Request,
+    project_id: int,
+    task_id: int,
+    cost_required: Optional[str] = Query(None),
+    db: sqlite3.Connection = Depends(get_db),
+):
+
+    cur = db.execute("SELECT * FROM projects WHERE id = ?", (project_id,))
+    project = cur.fetchone()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cur = db.execute("SELECT * FROM project_tasks WHERE id = ? AND project_id = ?", (task_id, project_id))
+    task = cur.fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    return templates.TemplateResponse(
+        "project_task_edit.html",
+        {"request": request, "project": dict(project), "task": dict(task),
+         "error": "Actual costs are required before completing a task with estimated costs." if cost_required else None},
+    )
+
+
+
+@router.post("/projects/{project_id}/tasks/{task_id}/edit")
+async def update_task(
+    request: Request,
+    project_id: int,
+    task_id: int,
+    title: str = Form(...),
+    description: Optional[str] = Form(None),
+    estimated_hours: Optional[str] = Form(None),
+    estimated_labour_cost: Optional[str] = Form(None),
+    estimated_material_cost: Optional[str] = Form(None),
+    actual_hours: Optional[str] = Form(None),
+    actual_labour_cost: Optional[str] = Form(None),
+    actual_material_cost: Optional[str] = Form(None),
+    db: sqlite3.Connection = Depends(get_db),
+):
+    db.execute(
+        """
+        UPDATE project_tasks
+        SET title = ?, description = ?,
+            estimated_hours = ?, estimated_labour_cost = ?, estimated_material_cost = ?,
+            actual_hours = ?, actual_labour_cost = ?, actual_material_cost = ?
+        WHERE id = ? AND project_id = ?
+        """,
+        (
+            title.strip(), description or None,
+            float(estimated_hours) if estimated_hours else None,
+            float(estimated_labour_cost) if estimated_labour_cost else None,
+            float(estimated_material_cost) if estimated_material_cost else None,
+            float(actual_hours) if actual_hours else None,
+            float(actual_labour_cost) if actual_labour_cost else None,
+            float(actual_material_cost) if actual_material_cost else None,
+            task_id, project_id,
+        ),
+    )
+    db.commit()
+
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+
 # --- Update task status -------------------------------------------------------
 
 @router.post("/projects/{project_id}/tasks/{task_id}/status")
@@ -310,6 +404,27 @@ async def update_task_status(
     if new_status not in VALID_TASK_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
 
+    # Close-gate: require actual costs if estimates exist
+    if new_status == "Done":
+        task = dict(db.execute(
+            "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
+            (task_id, project_id),
+        ).fetchone())
+
+        has_estimates = (
+            (task.get("estimated_labour_cost") and task["estimated_labour_cost"] > 0) or
+            (task.get("estimated_material_cost") and task["estimated_material_cost"] > 0)
+        )
+        missing_actuals = (
+            not task.get("actual_labour_cost") or
+            not task.get("actual_material_cost")
+        )
+        if has_estimates and missing_actuals:
+            return RedirectResponse(
+                url=f"/projects/{project_id}/tasks/{task_id}/edit?cost_required=1",
+                status_code=status.HTTP_303_SEE_OTHER,
+            )
+
     db.execute(
         "UPDATE project_tasks SET status = ? WHERE id = ? AND project_id = ?",
         (new_status, task_id, project_id),
@@ -317,6 +432,8 @@ async def update_task_status(
     db.commit()
 
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 
 
 # --- Delete task ---------------------------------------------------------------

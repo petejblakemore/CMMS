@@ -42,6 +42,57 @@
   </div>
 </div>
 
+<!-- Cost summary (only shown if any costs exist) -->
+{% if has_costs %}
+<div class="card" style="margin-bottom: 1rem;">
+  <h3 style="margin: 0 0 0.5rem;">Cost Summary</h3>
+  <table>
+    <thead>
+      <tr>
+        <th></th>
+        <th>Estimated</th>
+        <th>Actual</th>
+        <th>Variance</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td style="font-weight: 600;">Hours</td>
+        <td>{{ "%.1f"|format(cost.est_hours) }}h</td>
+        <td>{{ "%.1f"|format(cost.act_hours) }}h</td>
+        <td style="color: {% if cost.var_hours > 0 %}#b91c1c{% elif cost.var_hours < 0 %}#166534{% else %}#6b7280{% endif %};">
+          {{ "%+.1f"|format(cost.var_hours) }}h
+        </td>
+      </tr>
+      <tr>
+        <td style="font-weight: 600;">Labour</td>
+        <td>{{ currency }}{{ "%.2f"|format(cost.est_labour) }}</td>
+        <td>{{ currency }}{{ "%.2f"|format(cost.act_labour) }}</td>
+        <td style="color: {% if cost.var_labour > 0 %}#b91c1c{% elif cost.var_labour < 0 %}#166534{% else %}#6b7280{% endif %};">
+          {{ currency }}{{ "%+.2f"|format(cost.var_labour) }}
+        </td>
+      </tr>
+      <tr>
+        <td style="font-weight: 600;">Materials</td>
+        <td>{{ currency }}{{ "%.2f"|format(cost.est_material) }}</td>
+        <td>{{ currency }}{{ "%.2f"|format(cost.act_material) }}</td>
+        <td style="color: {% if cost.var_material > 0 %}#b91c1c{% elif cost.var_material < 0 %}#166534{% else %}#6b7280{% endif %};">
+          {{ currency }}{{ "%+.2f"|format(cost.var_material) }}
+        </td>
+      </tr>
+      <tr style="border-top: 2px solid #d1d5db;">
+        <td style="font-weight: 600;">Total</td>
+        <td style="font-weight: 600;">{{ currency }}{{ "%.2f"|format(cost.est_total) }}</td>
+        <td style="font-weight: 600;">{{ currency }}{{ "%.2f"|format(cost.act_total) }}</td>
+        <td style="font-weight: 600; color: {% if cost.var_total > 0 %}#b91c1c{% elif cost.var_total < 0 %}#166534{% else %}#6b7280{% endif %};">
+          {{ currency }}{{ "%+.2f"|format(cost.var_total) }}
+        </td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+{% endif %}
+
 <!-- Task list -->
 <h3>Tasks</h3>
 
@@ -52,6 +103,9 @@
       <th>#</th>
       <th>Task</th>
       <th>Status</th>
+      <th>Est. Hours</th>
+      <th>Est. Cost</th>
+      <th>Actual Cost</th>
       <th>Actions</th>
     </tr>
   </thead>
@@ -60,7 +114,7 @@
     <tr>
       <td>{{ task.sort_order }}</td>
       <td>
-        {{ task.title }}
+        <a href="/projects/{{ project.id }}/tasks/{{ task.id }}/edit">{{ task.title }}</a>
         {% if task.description %}
           <div style="font-size: 0.8rem; color: #6b7280;">{{ task.description }}</div>
         {% endif %}
@@ -74,6 +128,17 @@
           <span class="badge urgent">Blocked</span>
         {% else %}
           <span class="badge icebox">Pending</span>
+        {% endif %}
+      </td>
+      <td>{{ "%.1f"|format(task.estimated_hours) if task.estimated_hours else "" }}</td>
+      <td>
+        {% if task.estimated_labour_cost or task.estimated_material_cost %}
+          {{ currency }}{{ "%.2f"|format((task.estimated_labour_cost or 0) + (task.estimated_material_cost or 0)) }}
+        {% endif %}
+      </td>
+      <td>
+        {% if task.actual_labour_cost or task.actual_material_cost %}
+          {{ currency }}{{ "%.2f"|format((task.actual_labour_cost or 0) + (task.actual_material_cost or 0)) }}
         {% endif %}
       </td>
       <td>
