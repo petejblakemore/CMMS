@@ -138,6 +138,14 @@
         {% if task.description %}
           <div style="font-size: 0.8rem; color: #6b7280;">{{ task.description }}</div>
         {% endif %}
+        {% if task.depends_on_title %}
+          <div style="font-size: 0.75rem; color: #9333ea;">
+            &#8627; Depends on: {{ task.depends_on_title }}
+            {% if task.dependency_done %}
+              <span style="color: #16a34a;">&#10003;</span>
+            {% endif %}
+          </div>
+        {% endif %}
       </td>
       <td>
         {% if task.status == "Done" %}
@@ -173,23 +181,27 @@
               <input type="hidden" name="new_status" value="Done">
               <button class="btn" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem; background: #16a34a; border-color: #16a34a;">Complete</button>
             {% elif task.status == "Blocked" %}
-              <input type="hidden" name="new_status" value="Pending">
-              <button class="btn secondary" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Unblock</button>
+              {% if task.dependency_done %}
+                <input type="hidden" name="new_status" value="Pending">
+                <button class="btn secondary" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Unblock</button>
+              {% else %}
+                <button class="btn secondary" type="button" disabled style="font-size: 0.75rem; padding: 0.15rem 0.4rem; opacity: 0.5; cursor: not-allowed;" title="Waiting on: {{ task.depends_on_title }}">Blocked</button>
+              {% endif %}
             {% endif %}
           </form>
           {% endif %}
 
           <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/move" style="display: inline;">
             <input type="hidden" name="direction" value="up">
-            <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">↑</button>
+            <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">&#8593;</button>
           </form>
           <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/move" style="display: inline;">
             <input type="hidden" name="direction" value="down">
-            <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">↓</button>
+            <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem;">&#8595;</button>
           </form>
 
           <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/delete" style="display: inline;">
-            <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem; color: #b91c1c; border-color: #b91c1c;">✕</button>
+            <button class="btn secondary" type="submit" style="font-size: 0.7rem; padding: 0.1rem 0.3rem; color: #b91c1c; border-color: #b91c1c;">&#10005;</button>
           </form>
         </div>
         {% else %}
@@ -214,6 +226,17 @@
     <div style="margin-bottom: 0.5rem;">
       <input type="text" name="description" placeholder="Description (optional)" style="width: 100%; max-width: 25rem;">
     </div>
+    {% if tasks %}
+    <div style="margin-bottom: 0.5rem;">
+      <label for="depends_on_id" style="display: block; margin-bottom: 0.2rem; font-size: 0.85rem;">Depends on (optional)</label>
+      <select id="depends_on_id" name="depends_on_id" style="max-width: 25rem;">
+        <option value="">— No dependency —</option>
+        {% for t in tasks %}
+          <option value="{{ t.id }}">{{ t.sort_order }}. {{ t.title }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% endif %}
     <button class="btn" type="submit">Add task</button>
   </form>
 </div>

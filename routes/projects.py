@@ -2,6 +2,7 @@
 #
 # Project management routes: list, create, edit, delete projects,
 # and manage tasks within projects.
+# Phase 4: task dependencies and blocking logic.
 
 import sqlite3
 from typing import Optional
@@ -122,6 +123,17 @@ async def project_detail(
         "SELECT * FROM project_tasks WHERE project_id = ? ORDER BY sort_order, id",
         (project_id,),
     ))
+
+    # Build a lookup so we can show dependency names in the template
+    task_by_id = {t["id"]: t for t in tasks}
+    for t in tasks:
+        dep_id = t.get("depends_on_id")
+        if dep_id and dep_id in task_by_id:
+            t["depends_on_title"] = task_by_id[dep_id]["title"]
+            t["dependency_done"] = task_by_id[dep_id]["status"] == "Done"
+        else:
+            t["depends_on_title"] = None
+            t["dependency_done"] = True
 
     total_tasks = len(tasks)
     done_tasks = sum(1 for t in tasks if t["status"] == "Done")
@@ -347,6 +359,7 @@ async def add_project_task(
     project_id: int,
     title: str = Form(...),
     description: Optional[str] = Form(None),
+    depends_on_id: Optional[int] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
     max_order = db.execute(
@@ -354,9 +367,21 @@ async def add_project_task(
         (project_id,),
     ).fetchone()["max_order"]
 
+    dep_val = depends_on_id if depends_on_id not in (None, 0) else None
+
+    # Auto-block if the dependency task isn't done yet
+    initial_status = "Pending"
+    if dep_val:
+        dep_task = db.execute(
+            "SELECT status FROM project_tasks WHERE id = ? AND project_id = ?",
+            (dep_val, project_id),
+        ).fetchone()
+        if dep_task and dep_task["status"] != "Done":
+            initial_status = "Blocked"
+
     db.execute(
-        "INSERT INTO project_tasks (project_id, title, description, sort_order) VALUES (?, ?, ?, ?)",
-        (project_id, title.strip(), description or None, max_order + 1),
+        "INSERT INTO project_tasks (project_id, title, description, sort_order, depends_on_id, status) VALUES (?, ?, ?, ?, ?, ?)",
+        (project_id, title.strip(), description or None, max_order + 1, dep_val, initial_status),
     )
     db.commit()
 
@@ -383,9 +408,16 @@ async def edit_task_form(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    # Get other tasks in this project for the dependency dropdown (exclude self)
+    other_tasks = dicts(db.execute(
+        "SELECT id, title FROM project_tasks WHERE project_id = ? AND id != ? ORDER BY sort_order",
+        (project_id, task_id),
+    ))
+
     return templates.TemplateResponse(
         "project_task_edit.html",
         {"request": request, "project": dict(project), "task": dict(task),
+         "other_tasks": other_tasks,
          "error": "Actual costs are required before completing a task with estimated costs." if cost_required else None},
     )
 
@@ -397,6 +429,7 @@ async def update_task(
     task_id: int,
     title: str = Form(...),
     description: Optional[str] = Form(None),
+    depends_on_id: Optional[int] = Form(None),
     estimated_hours: Optional[str] = Form(None),
     estimated_labour_cost: Optional[str] = Form(None),
     estimated_material_cost: Optional[str] = Form(None),
@@ -405,16 +438,22 @@ async def update_task(
     actual_material_cost: Optional[str] = Form(None),
     db: sqlite3.Connection = Depends(get_db),
 ):
+    dep_val = depends_on_id if depends_on_id not in (None, 0) else None
+
+    # Prevent circular: a task cannot depend on itself
+    if dep_val == task_id:
+        dep_val = None
+
     db.execute(
         """
         UPDATE project_tasks
-        SET title = ?, description = ?,
+        SET title = ?, description = ?, depends_on_id = ?,
             estimated_hours = ?, estimated_labour_cost = ?, estimated_material_cost = ?,
             actual_hours = ?, actual_labour_cost = ?, actual_material_cost = ?
         WHERE id = ? AND project_id = ?
         """,
         (
-            title.strip(), description or None,
+            title.strip(), description or None, dep_val,
             float(estimated_hours) if estimated_hours else None,
             float(estimated_labour_cost) if estimated_labour_cost else None,
             float(estimated_material_cost) if estimated_material_cost else None,
@@ -424,6 +463,30 @@ async def update_task(
             task_id, project_id,
         ),
     )
+
+    # Re-evaluate blocked status after dependency change
+    task = dict(db.execute(
+        "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
+        (task_id, project_id),
+    ).fetchone())
+
+    if dep_val and task["status"] in ("Pending", "Blocked"):
+        dep_task = db.execute(
+            "SELECT status FROM project_tasks WHERE id = ?", (dep_val,)
+        ).fetchone()
+        if dep_task and dep_task["status"] != "Done":
+            db.execute(
+                "UPDATE project_tasks SET status = 'Blocked' WHERE id = ?", (task_id,)
+            )
+        else:
+            db.execute(
+                "UPDATE project_tasks SET status = 'Pending' WHERE id = ?", (task_id,)
+            )
+    elif not dep_val and task["status"] == "Blocked":
+        db.execute(
+            "UPDATE project_tasks SET status = 'Pending' WHERE id = ?", (task_id,)
+        )
+
     db.commit()
 
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
@@ -442,12 +505,24 @@ async def update_task_status(
     if new_status not in VALID_TASK_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status: {new_status}")
 
-    if new_status == "Done":
-        task = dict(db.execute(
-            "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
-            (task_id, project_id),
-        ).fetchone())
+    task = dict(db.execute(
+        "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
+        (task_id, project_id),
+    ).fetchone())
 
+    # Block starting a task whose dependency isn't done
+    if new_status == "In Progress" and task.get("depends_on_id"):
+        dep_task = db.execute(
+            "SELECT status FROM project_tasks WHERE id = ?",
+            (task["depends_on_id"],),
+        ).fetchone()
+        if dep_task and dep_task["status"] != "Done":
+            return RedirectResponse(
+                url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+            )
+
+    # Close-gate: require actual costs before completing a task with estimates
+    if new_status == "Done":
         has_estimates = (
             (task.get("estimated_labour_cost") and task["estimated_labour_cost"] > 0) or
             (task.get("estimated_material_cost") and task["estimated_material_cost"] > 0)
@@ -466,6 +541,21 @@ async def update_task_status(
         "UPDATE project_tasks SET status = ? WHERE id = ? AND project_id = ?",
         (new_status, task_id, project_id),
     )
+
+    # Auto-unblock dependents when a task is completed
+    if new_status == "Done":
+        db.execute(
+            "UPDATE project_tasks SET status = 'Pending' WHERE depends_on_id = ? AND project_id = ? AND status = 'Blocked'",
+            (task_id, project_id),
+        )
+
+    # Auto-block dependents if a completed task is reopened
+    if task["status"] == "Done" and new_status != "Done":
+        db.execute(
+            "UPDATE project_tasks SET status = 'Blocked' WHERE depends_on_id = ? AND project_id = ? AND status IN ('Pending', 'In Progress')",
+            (task_id, project_id),
+        )
+
     db.commit()
 
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
@@ -480,6 +570,17 @@ async def delete_project_task(
     task_id: int,
     db: sqlite3.Connection = Depends(get_db),
 ):
+    # Clear dependency references from other tasks before deleting
+    db.execute(
+        "UPDATE project_tasks SET depends_on_id = NULL WHERE depends_on_id = ? AND project_id = ?",
+        (task_id, project_id),
+    )
+    # Unblock any tasks that were blocked by this one
+    db.execute(
+        "UPDATE project_tasks SET status = 'Pending' WHERE depends_on_id = ? AND project_id = ? AND status = 'Blocked'",
+        (task_id, project_id),
+    )
+
     db.execute(
         "DELETE FROM project_tasks WHERE id = ? AND project_id = ?",
         (task_id, project_id),

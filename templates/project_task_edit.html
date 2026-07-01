@@ -20,6 +20,16 @@
     <textarea id="description" name="description" rows="3" style="width: 100%;">{{ task.description or '' }}</textarea>
   </div>
 
+  <div style="margin-bottom: 0.6rem;">
+    <label for="depends_on_id" style="display: block; margin-bottom: 0.2rem;">Depends on</label>
+    <select id="depends_on_id" name="depends_on_id" style="width: 100%;">
+      <option value="">— No dependency —</option>
+      {% for t in other_tasks %}
+        <option value="{{ t.id }}" {% if task.depends_on_id == t.id %}selected{% endif %}>{{ t.title }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
   <h3 style="margin-top: 1rem; margin-bottom: 0.5rem;">Estimated</h3>
 
   <div style="margin-bottom: 0.6rem;">
