@@ -25,7 +25,6 @@ async def index(request: Request, db: sqlite3.Connection = Depends(get_db)):
         )
     )
 
-
     upcoming_pm = dicts(
         db.execute(
             "SELECT * FROM v_upcoming_pm "
@@ -33,7 +32,7 @@ async def index(request: Request, db: sqlite3.Connection = Depends(get_db)):
             "ORDER BY next_due_date"
         )
     )
-    # Locations with open work order counts
+
     location_wo_counts = dicts(
         db.execute(
             """
@@ -57,6 +56,36 @@ async def index(request: Request, db: sqlite3.Connection = Depends(get_db)):
         )
     )
 
+    # Project summary for dashboard
+    project_summary = dicts(db.execute(
+        """
+        SELECT p.id, p.title, p.status,
+               (SELECT COUNT(*) FROM project_tasks WHERE project_id = p.id) AS total_tasks,
+               (SELECT COUNT(*) FROM project_tasks WHERE project_id = p.id AND status = 'Done') AS done_tasks,
+               (SELECT COUNT(*) FROM project_tasks WHERE project_id = p.id AND status = 'Blocked') AS blocked_tasks,
+               (SELECT COUNT(*) FROM project_tasks t
+                WHERE t.project_id = p.id
+                  AND t.work_order_id IS NOT NULL
+                  AND t.status != 'Done'
+                  AND EXISTS (
+                    SELECT 1 FROM work_orders w
+                    WHERE w.id = t.work_order_id
+                      AND w.due_date IS NOT NULL
+                      AND w.due_date < date('now')
+                      AND w.status NOT IN ('Done', 'Cancelled')
+                  )
+               ) AS overdue_tasks
+        FROM projects p
+        WHERE p.status IN ('Active', 'Planning', 'On Hold')
+        ORDER BY CASE p.status WHEN 'Active' THEN 0 WHEN 'Planning' THEN 1 WHEN 'On Hold' THEN 2 END, p.title
+        """
+    ))
+
+    for p in project_summary:
+        total = p["total_tasks"]
+        done = p["done_tasks"]
+        p["pct_complete"] = round((done / total * 100) if total > 0 else 0)
+
     return templates.TemplateResponse(
         "index.html",
         {
@@ -67,5 +96,6 @@ async def index(request: Request, db: sqlite3.Connection = Depends(get_db)):
             "upcoming_pm": upcoming_pm,
             "location_wo_counts": location_wo_counts,
             "asset_wo_counts": asset_wo_counts,
+            "project_summary": project_summary,
         },
     )

@@ -63,6 +63,64 @@
   </div>
 </div>
 
+{% if project_summary %}
+<div class="stack">
+  <div>
+    <h3>Active projects</h3>
+    <table>
+      <thead>
+        <tr>
+          <th>Project</th>
+          <th>Status</th>
+          <th>Progress</th>
+          <th>Blocked</th>
+          <th>Overdue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for p in project_summary %}
+        <tr>
+          <td><a href="/projects/{{ p.id }}">{{ p.title }}</a></td>
+          <td>
+            {% if p.status == "Active" %}
+              <span class="badge running">Active</span>
+            {% elif p.status == "On Hold" %}
+              <span class="badge high">On Hold</span>
+            {% else %}
+              <span class="badge icebox">{{ p.status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+              <div style="background: #e5e7eb; border-radius: 999px; height: 0.75rem; width: 6rem; position: relative;">
+                <div style="background: {% if p.pct_complete == 100 %}#16a34a{% elif p.pct_complete > 50 %}#2563eb{% else %}#94a3b8{% endif %}; border-radius: 999px; height: 100%; width: {{ p.pct_complete }}%;"></div>
+              </div>
+              <span style="font-size: 0.8rem;">{{ p.pct_complete }}%</span>
+            </div>
+          </td>
+          <td>
+            {% if p.blocked_tasks > 0 %}
+              <span class="badge urgent">{{ p.blocked_tasks }}</span>
+            {% else %}
+              0
+            {% endif %}
+          </td>
+          <td>
+            {% if p.overdue_tasks > 0 %}
+              <span class="badge high">{{ p.overdue_tasks }}</span>
+            {% else %}
+              0
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    <p><a class="btn secondary" href="/projects">All projects</a></p>
+  </div>
+</div>
+{% endif %}
+
 <div class="stack">
   <div>
     <h3>Open Work Orders by Location</h3>
