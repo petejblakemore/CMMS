@@ -4,7 +4,8 @@
 <h2>Edit work order #{{ wo.id }}</h2>
 
 <form method="post">
-  <input type="hidden" name="csrftoken" value="{{ request.state.csrftoken }}">
+
+  <input type="hidden" name="return_url" value="{{ return_url }}">
 
   <div class="form-row">
     <label for="title">Title</label>
@@ -69,7 +70,7 @@
   <div class="form-row">
     <label for="estimated_hours">Estimated hours</label>
     <input type="number" id="estimated_hours" name="estimated_hours" step="0.25" min="0" value="{{ wo.estimated_hours or '' }}">
-  </div> 
+  </div>
 
   {% if error %}
     <p style="color: #b91c1c; font-weight: 600;">{{ error }}</p>
@@ -109,10 +110,10 @@
 
   <div class="form-actions">
     <button class="btn" type="submit">Save changes</button>
-    <a class="btn secondary" href="/work_orders">Cancel</a>
+    <a class="btn secondary" href="{{ return_url }}">Close</a>
     <a class="btn" href="/work_orders/{{ wo.id }}/delete" style="background: #b91c1c; border-color: #b91c1c; margin-left: auto;">Delete</a>
   </div>
-  
+
 {% if wo_history %}
 <h3 style="margin-top: 2rem;">Status History</h3>
 <table>

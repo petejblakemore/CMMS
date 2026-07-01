@@ -127,10 +127,10 @@
   </thead>
   <tbody>
     {% for task in tasks %}
-    <tr>
+    <tr{% if task.work_order_id %} style="opacity: 0.7;"{% endif %}>
       <td>{{ task.sort_order }}</td>
       <td>
-        {% if project.status != "Complete" %}
+        {% if project.status != "Complete" and not task.work_order_id %}
           <a href="/projects/{{ project.id }}/tasks/{{ task.id }}/edit">{{ task.title }}</a>
         {% else %}
           {{ task.title }}
@@ -143,6 +143,14 @@
             &#8627; Depends on: {{ task.depends_on_title }}
             {% if task.dependency_done %}
               <span style="color: #16a34a;">&#10003;</span>
+            {% endif %}
+          </div>
+        {% endif %}
+        {% if task.work_order_id %}
+          <div style="font-size: 0.75rem; color: #2563eb;">
+            &#128279; Managed by <a href="/work_orders/{{ task.work_order_id }}/edit?return_url=/projects/{{ project.id }}" style="font-weight: 600;">WO #{{ task.work_order_id }}</a>
+            {% if task.wo_status %}
+              <span class="badge {% if task.wo_status == 'Done' %}done{% elif task.wo_status == 'In Progress' %}running{% elif task.wo_status == 'Cancelled' %}high{% else %}icebox{% endif %}" style="font-size: 0.65rem; padding: 0.05rem 0.3rem;">{{ task.wo_status }}</span>
             {% endif %}
           </div>
         {% endif %}
@@ -165,30 +173,46 @@
         {% endif %}
       </td>
       <td>
-        {% if task.actual_labour_cost or task.actual_material_cost %}
-          {{ currency }}{{ "%.2f"|format((task.actual_labour_cost or 0) + (task.actual_material_cost or 0)) }}
+        {% set act_labour = task.wo_actual_labour if task.wo_actual_labour is not none else (task.actual_labour_cost or 0) %}
+        {% set act_material = task.wo_actual_material if task.wo_actual_material is not none else (task.actual_material_cost or 0) %}
+        {% if act_labour or act_material %}
+          {{ currency }}{{ "%.2f"|format(act_labour + act_material) }}
         {% endif %}
       </td>
       <td>
         {% if project.status != "Complete" %}
         <div style="display: flex; gap: 0.25rem; flex-wrap: wrap;">
-          {% if task.status != "Done" %}
-          <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/status" style="display: inline;">
-            {% if task.status == "Pending" %}
-              <input type="hidden" name="new_status" value="In Progress">
-              <button class="btn" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Start</button>
-            {% elif task.status == "In Progress" %}
-              <input type="hidden" name="new_status" value="Done">
-              <button class="btn" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem; background: #16a34a; border-color: #16a34a;">Complete</button>
-            {% elif task.status == "Blocked" %}
-              {% if task.dependency_done %}
-                <input type="hidden" name="new_status" value="Pending">
-                <button class="btn secondary" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Unblock</button>
-              {% else %}
-                <button class="btn secondary" type="button" disabled style="font-size: 0.75rem; padding: 0.15rem 0.4rem; opacity: 0.5; cursor: not-allowed;" title="Waiting on: {{ task.depends_on_title }}">Blocked</button>
+
+          {# WO-managed tasks: no status buttons, just the WO link #}
+          {% if task.work_order_id %}
+            <a class="btn secondary" href="/work_orders/{{ task.work_order_id }}/edit?return_url=/projects/{{ project.id }}" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Open WO</a>
+
+          {# Non-WO tasks: normal status buttons #}
+          {% else %}
+            {% if task.status != "Done" %}
+            <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/status" style="display: inline;">
+              {% if task.status == "Pending" %}
+                <input type="hidden" name="new_status" value="In Progress">
+                <button class="btn" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Start</button>
+              {% elif task.status == "In Progress" %}
+                <input type="hidden" name="new_status" value="Done">
+                <button class="btn" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem; background: #16a34a; border-color: #16a34a;">Complete</button>
+              {% elif task.status == "Blocked" %}
+                {% if task.dependency_done %}
+                  <input type="hidden" name="new_status" value="Pending">
+                  <button class="btn secondary" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;">Unblock</button>
+                {% else %}
+                  <button class="btn secondary" type="button" disabled style="font-size: 0.75rem; padding: 0.15rem 0.4rem; opacity: 0.5; cursor: not-allowed;" title="Waiting on: {{ task.depends_on_title }}">Blocked</button>
+                {% endif %}
               {% endif %}
+            </form>
             {% endif %}
-          </form>
+
+            {% if task.status != "Done" %}
+            <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/generate-wo" style="display: inline;">
+              <button class="btn secondary" type="submit" style="font-size: 0.75rem; padding: 0.15rem 0.4rem;" title="Create a linked work order from this task">WO</button>
+            </form>
+            {% endif %}
           {% endif %}
 
           <form method="post" action="/projects/{{ project.id }}/tasks/{{ task.id }}/move" style="display: inline;">

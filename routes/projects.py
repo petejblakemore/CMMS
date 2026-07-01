@@ -3,6 +3,7 @@
 # Project management routes: list, create, edit, delete projects,
 # and manage tasks within projects.
 # Phase 4: task dependencies and blocking logic.
+# Phase 5: generate work order from task, WO is master for linked tasks.
 
 import sqlite3
 from typing import Optional
@@ -124,7 +125,6 @@ async def project_detail(
         (project_id,),
     ))
 
-    # Build a lookup so we can show dependency names in the template
     task_by_id = {t["id"]: t for t in tasks}
     for t in tasks:
         dep_id = t.get("depends_on_id")
@@ -135,6 +135,26 @@ async def project_detail(
             t["depends_on_title"] = None
             t["dependency_done"] = True
 
+        wo_id = t.get("work_order_id")
+        if wo_id:
+            wo_row = db.execute(
+                "SELECT status, actual_labour_cost, actual_material_cost FROM work_orders WHERE id = ?",
+                (wo_id,),
+            ).fetchone()
+            if wo_row:
+                t["wo_status"] = wo_row["status"]
+                t["wo_actual_labour"] = wo_row["actual_labour_cost"]
+                t["wo_actual_material"] = wo_row["actual_material_cost"]
+            else:
+                t["work_order_id"] = None
+                t["wo_status"] = None
+                t["wo_actual_labour"] = None
+                t["wo_actual_material"] = None
+        else:
+            t["wo_status"] = None
+            t["wo_actual_labour"] = None
+            t["wo_actual_material"] = None
+
     total_tasks = len(tasks)
     done_tasks = sum(1 for t in tasks if t["status"] == "Done")
     pct_complete = round((done_tasks / total_tasks * 100) if total_tasks > 0 else 0)
@@ -144,8 +164,14 @@ async def project_detail(
         "est_labour": sum(t["estimated_labour_cost"] or 0 for t in tasks),
         "est_material": sum(t["estimated_material_cost"] or 0 for t in tasks),
         "act_hours": sum(t["actual_hours"] or 0 for t in tasks),
-        "act_labour": sum(t["actual_labour_cost"] or 0 for t in tasks),
-        "act_material": sum(t["actual_material_cost"] or 0 for t in tasks),
+        "act_labour": sum(
+            (t["wo_actual_labour"] if t["wo_actual_labour"] is not None else (t["actual_labour_cost"] or 0))
+            for t in tasks
+        ),
+        "act_material": sum(
+            (t["wo_actual_material"] if t["wo_actual_material"] is not None else (t["actual_material_cost"] or 0))
+            for t in tasks
+        ),
     }
     cost_summary["est_total"] = cost_summary["est_labour"] + cost_summary["est_material"]
     cost_summary["act_total"] = cost_summary["act_labour"] + cost_summary["act_material"]
@@ -369,7 +395,6 @@ async def add_project_task(
 
     dep_val = depends_on_id if depends_on_id not in (None, 0) else None
 
-    # Auto-block if the dependency task isn't done yet
     initial_status = "Pending"
     if dep_val:
         dep_task = db.execute(
@@ -408,7 +433,6 @@ async def edit_task_form(
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
-    # Get other tasks in this project for the dependency dropdown (exclude self)
     other_tasks = dicts(db.execute(
         "SELECT id, title FROM project_tasks WHERE project_id = ? AND id != ? ORDER BY sort_order",
         (project_id, task_id),
@@ -440,7 +464,6 @@ async def update_task(
 ):
     dep_val = depends_on_id if depends_on_id not in (None, 0) else None
 
-    # Prevent circular: a task cannot depend on itself
     if dep_val == task_id:
         dep_val = None
 
@@ -464,28 +487,29 @@ async def update_task(
         ),
     )
 
-    # Re-evaluate blocked status after dependency change
     task = dict(db.execute(
         "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
         (task_id, project_id),
     ).fetchone())
 
-    if dep_val and task["status"] in ("Pending", "Blocked"):
-        dep_task = db.execute(
-            "SELECT status FROM project_tasks WHERE id = ?", (dep_val,)
-        ).fetchone()
-        if dep_task and dep_task["status"] != "Done":
-            db.execute(
-                "UPDATE project_tasks SET status = 'Blocked' WHERE id = ?", (task_id,)
-            )
-        else:
+    # Only re-evaluate blocked status for tasks not managed by a WO
+    if not task.get("work_order_id"):
+        if dep_val and task["status"] in ("Pending", "Blocked"):
+            dep_task = db.execute(
+                "SELECT status FROM project_tasks WHERE id = ?", (dep_val,)
+            ).fetchone()
+            if dep_task and dep_task["status"] != "Done":
+                db.execute(
+                    "UPDATE project_tasks SET status = 'Blocked' WHERE id = ?", (task_id,)
+                )
+            else:
+                db.execute(
+                    "UPDATE project_tasks SET status = 'Pending' WHERE id = ?", (task_id,)
+                )
+        elif not dep_val and task["status"] == "Blocked":
             db.execute(
                 "UPDATE project_tasks SET status = 'Pending' WHERE id = ?", (task_id,)
             )
-    elif not dep_val and task["status"] == "Blocked":
-        db.execute(
-            "UPDATE project_tasks SET status = 'Pending' WHERE id = ?", (task_id,)
-        )
 
     db.commit()
 
@@ -510,7 +534,12 @@ async def update_task_status(
         (task_id, project_id),
     ).fetchone())
 
-    # Block starting a task whose dependency isn't done
+    # Reject manual status changes on WO-managed tasks
+    if task.get("work_order_id"):
+        return RedirectResponse(
+            url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
+        )
+
     if new_status == "In Progress" and task.get("depends_on_id"):
         dep_task = db.execute(
             "SELECT status FROM project_tasks WHERE id = ?",
@@ -521,7 +550,6 @@ async def update_task_status(
                 url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER
             )
 
-    # Close-gate: require actual costs before completing a task with estimates
     if new_status == "Done":
         has_estimates = (
             (task.get("estimated_labour_cost") and task["estimated_labour_cost"] > 0) or
@@ -542,20 +570,75 @@ async def update_task_status(
         (new_status, task_id, project_id),
     )
 
-    # Auto-unblock dependents when a task is completed
     if new_status == "Done":
         db.execute(
             "UPDATE project_tasks SET status = 'Pending' WHERE depends_on_id = ? AND project_id = ? AND status = 'Blocked'",
             (task_id, project_id),
         )
 
-    # Auto-block dependents if a completed task is reopened
     if task["status"] == "Done" and new_status != "Done":
         db.execute(
             "UPDATE project_tasks SET status = 'Blocked' WHERE depends_on_id = ? AND project_id = ? AND status IN ('Pending', 'In Progress')",
             (task_id, project_id),
         )
 
+    db.commit()
+
+    return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+# --- Generate work order from task --------------------------------------------
+
+@router.post("/projects/{project_id}/tasks/{task_id}/generate-wo")
+async def generate_wo_from_task(
+    request: Request,
+    project_id: int,
+    task_id: int,
+    db: sqlite3.Connection = Depends(get_db),
+):
+    cur = db.execute(
+        "SELECT p.*, p.title AS project_title FROM projects p WHERE p.id = ?",
+        (project_id,),
+    )
+    project = cur.fetchone()
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    cur = db.execute(
+        "SELECT * FROM project_tasks WHERE id = ? AND project_id = ?",
+        (task_id, project_id),
+    )
+    task = cur.fetchone()
+    if not task:
+        raise HTTPException(status_code=404, detail="Task not found")
+
+    if task["work_order_id"]:
+        return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+    cur = db.execute(
+        """
+        INSERT INTO work_orders
+          (asset_id, location_id, title, description, status, priority, source,
+           estimated_hours, estimated_labour_cost, estimated_material_cost)
+        VALUES (?, ?, ?, ?, 'Open', 'Normal', ?, ?, ?, ?)
+        """,
+        (
+            project["asset_id"],
+            project["location_id"],
+            task["title"],
+            task["description"],
+            f"Project: {project['project_title']}",
+            task["estimated_hours"],
+            task["estimated_labour_cost"],
+            task["estimated_material_cost"],
+        ),
+    )
+    wo_id = cur.lastrowid
+
+    db.execute(
+        "UPDATE project_tasks SET work_order_id = ? WHERE id = ?",
+        (wo_id, task_id),
+    )
     db.commit()
 
     return RedirectResponse(url=f"/projects/{project_id}", status_code=status.HTTP_303_SEE_OTHER)
@@ -570,12 +653,10 @@ async def delete_project_task(
     task_id: int,
     db: sqlite3.Connection = Depends(get_db),
 ):
-    # Clear dependency references from other tasks before deleting
     db.execute(
         "UPDATE project_tasks SET depends_on_id = NULL WHERE depends_on_id = ? AND project_id = ?",
         (task_id, project_id),
     )
-    # Unblock any tasks that were blocked by this one
     db.execute(
         "UPDATE project_tasks SET status = 'Pending' WHERE depends_on_id = ? AND project_id = ? AND status = 'Blocked'",
         (task_id, project_id),
