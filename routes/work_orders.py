@@ -25,7 +25,7 @@ WO_TO_TASK_STATUS = {
 }
 
 
-def _check_linked_task_blocked(db: sqlite3.Connection, wo_id: int) -> str | None:
+def _check_linked_task_blocked(db: sqlite3.Connection, wo_id: int) -> Optional[str]:
     """Return an error message if the WO's linked task has an unsatisfied dependency."""
     row = db.execute(
         """SELECT t.depends_on_id, dep.status AS dep_status, dep.title AS dep_title
